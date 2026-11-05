@@ -1,0 +1,40 @@
+name: Factory Quality Gates
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        required: false
+        type: string
+        default: '22'
+
+jobs:
+  verify:
+    name: Verify Factory Boundaries & Invariants
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Incremental TypeScript Build
+        run: pnpm build
+
+      - name: Run Factory Deterministic Guards
+        run: pnpm guard
+
+      - name: Run Synthetic Scenarios & Contract Suites
+        run: pnpm test

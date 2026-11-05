@@ -1,0 +1,32 @@
+{
+  "$schema": "./packages/guards/schema.json",
+  "project": {
+    "name": "@agentic-factory/monorepo",
+    "architecture": "modular-monorepo"
+  },
+  "guards": {
+    "noCycles": {
+      "enabled": true,
+      "rootDir": "packages"
+    },
+    "boundaries": [
+      {
+        "package": "packages/harness",
+        "disallowImportsFrom": ["packages/guards", "packages/create-agentic-factory"]
+      },
+      {
+        "package": "packages/guards",
+        "disallowImportsFrom": ["packages/create-agentic-factory"]
+      }
+    ],
+    "plainLanguage": {
+      "enabled": true,
+      "targetDirs": ["packages/create-agentic-factory/src"],
+      "forbiddenTerms": ["transpile", "ast_node", "llm_hallucination"]
+    },
+    "secrets": {
+      "enabled": true,
+      "patterns": ["sk_live_", "ghp_", "bearer ", "private_key"]
+    }
+  }
+}

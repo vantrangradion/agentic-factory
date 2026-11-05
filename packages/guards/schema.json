@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgenticFactoryConfig",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "architecture": { "type": "string", "enum": ["modular-monorepo", "hexagonal", "clean-architecture", "microservice"] }
+      },
+      "required": ["name"]
+    },
+    "guards": {
+      "type": "object",
+      "properties": {
+        "noCycles": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "rootDir": { "type": "string" },
+            "exclude": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "package": { "type": "string" },
+              "disallowImportsFrom": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["package", "disallowImportsFrom"]
+          }
+        },
+        "plainLanguage": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "targetDirs": { "type": "array", "items": { "type": "string" } },
+            "forbiddenTerms": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "secrets": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "patterns": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "testing": {
+      "type": "object",
+      "properties": {
+        "targetCoverage": { "type": "number" },
+        "maxSuiteDurationMs": { "type": "number" },
+        "requireSyntheticScenarios": { "type": "boolean" }
+      }
+    }
+  }
+}

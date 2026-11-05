@@ -1,0 +1,16 @@
+{
+  "name": "@agentic-factory/harness",
+  "version": "1.0.0",
+  "description": "Domain-neutral synthetic testing harness, virtual clock, and contract verification engine",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

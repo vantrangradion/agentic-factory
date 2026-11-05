@@ -1,0 +1,35 @@
+{
+  "name": "agentic-factory",
+  "version": "1.0.0",
+  "description": "Project-agnostic software factory skills, agents, and deterministic harness workflows",
+  "author": "Antigravity Engineering",
+  "skills": [
+    { "name": "agentic-sdlc", "path": "skills/agentic-sdlc" },
+    { "name": "factory-harness", "path": "skills/factory-harness" },
+    { "name": "architecture-decision", "path": "skills/architecture-decision" },
+    { "name": "user-story-authoring", "path": "skills/user-story-authoring" },
+    { "name": "practical-test-pyramid", "path": "skills/practical-test-pyramid" }
+  ],
+  "agents": [
+    {
+      "name": "SpecArchitect",
+      "description": "Guides system architecture trade-offs, drafts ADRs, and writes BDD user stories",
+      "systemPromptPath": "agents/spec-architect.md"
+    },
+    {
+      "name": "HarnessEngineer",
+      "description": "Constructs workspace topology, AST guardrails, synthetic scenario builders, and contract runners",
+      "systemPromptPath": "agents/harness-engineer.md"
+    },
+    {
+      "name": "GuardEnforcer",
+      "description": "Runs deterministic AST boundary checks, cycle linters, and plain-language verifications",
+      "systemPromptPath": "agents/guard-enforcer.md"
+    }
+  ],
+  "rules": [
+    {
+      "path": "rules/AGENTS.md"
+    }
+  ]
+}

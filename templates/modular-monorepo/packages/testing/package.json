@@ -1,0 +1,19 @@
+{
+  "name": "@{{PROJECT_NAME}}/testing",
+  "version": "0.1.0",
+  "description": "Synthetic scenario testing harness and contract runners",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@{{PROJECT_NAME}}/types": "workspace:*",
+    "@agentic-factory/harness": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

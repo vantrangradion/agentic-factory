@@ -1,0 +1,13 @@
+{
+  "name": "@{{PROJECT_NAME}}/types",
+  "version": "0.1.0",
+  "description": "Unified domain contracts and interfaces with zero runtime dependencies",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

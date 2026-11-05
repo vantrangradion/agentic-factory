@@ -1,0 +1,19 @@
+{
+  "name": "@agentic-factory/guards",
+  "version": "1.0.0",
+  "description": "Deterministic AST and architectural boundary guardrails for the Factory Model",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "agentic-guards": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
