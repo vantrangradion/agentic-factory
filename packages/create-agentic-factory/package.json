@@ -2,6 +2,22 @@
   "name": "create-agentic-factory",
   "version": "1.0.0",
   "description": "Turnkey scaffolder for initializing project-agnostic Agentic Software Factories",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vantrangradion/agentic-factory.git",
+    "directory": "packages/create-agentic-factory"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "agentic-factory",
+    "scaffolder",
+    "cli",
+    "vibe-coding",
+    "agentic-sdlc"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

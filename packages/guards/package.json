@@ -2,6 +2,22 @@
   "name": "@agentic-factory/guards",
   "version": "1.0.0",
   "description": "Deterministic AST and architectural boundary guardrails for the Factory Model",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vantrangradion/agentic-factory.git",
+    "directory": "packages/guards"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "agentic-factory",
+    "ast-guards",
+    "boundary-check",
+    "linter",
+    "quality-gates"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
