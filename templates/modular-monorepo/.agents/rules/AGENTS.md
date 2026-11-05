@@ -44,4 +44,9 @@ To keep the agent's context window lean and fast:
   - When assigned a task or user story, the agent executes the complete 6-step lifecycle autonomously (Red -> Green -> Guard -> Adversarial Audit).
   - Creates a dedicated feature branch, pushes to the remote, and opens a Pull Request via GitHub CLI (`gh pr create`).
   - PR descriptions must include full Red-to-Green test logs, guard passes, and adversarial audit summaries for developer sign-off.
+* **Story Batching and Milestone Execution:**
+  - When assigned a multi-story batch or sprint milestone, execute stories sequentially in topological dependency order.
+  - Never bundle multiple stories into a single monolithic PR; each story must deliver an isolated feature branch and dedicated PR.
+  - If a story hits a non-automatable human gate (such as physical device login or QR code scanning), pause and notify the developer.
+  - Recommend `/compact` between major milestones to maintain conversation hygiene.
 
