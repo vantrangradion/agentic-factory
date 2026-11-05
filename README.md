@@ -62,10 +62,18 @@ flowchart TD
 
 ## 1. Quick Start: Scaffolding a New Project
 
-Any developer on your team can instantiate an Agentic Factory project in one command:
-
+### Option A: From NPM (Published)
 ```bash
 npx create-agentic-factory my-payment-service --arch modular-monorepo --jargon "deadlock,mutex,sql_error"
+```
+
+### Option B: Directly from GitHub Clone
+```bash
+git clone https://github.com/vantrangradion/agentic-factory.git
+cd agentic-factory && pnpm install && pnpm build
+
+# Run the scaffolder anywhere:
+node packages/create-agentic-factory/dist/cli.js my-payment-service --arch modular-monorepo
 ```
 
 This generates:
@@ -145,8 +153,12 @@ const events = builder.generate(10, (idx, prng, clock) => ({
 To equip your Antigravity IDE with global factory intelligence across all workspaces:
 
 ```bash
+# Clone the repository (if not already cloned)
+git clone https://github.com/vantrangradion/agentic-factory.git ~/agentic-factory
+
+# Symlink the plugin bundle to Antigravity's global plugin directory
 mkdir -p ~/.gemini/config/plugins
-ln -sfn $(pwd)/plugin ~/.gemini/config/plugins/agentic-factory
+ln -sfn ~/agentic-factory/plugin ~/.gemini/config/plugins/agentic-factory
 ```
 
 Once linked, all your projects immediately have access to:
@@ -160,14 +172,15 @@ Once linked, all your projects immediately have access to:
 
 ## 5. Reusable CI/CD Pipeline
 
-Add `.github/workflows/ci.yml` in your consuming repository:
+Add `.github/workflows/ci.yml` in your consuming repository to enforce guardrails automatically on every Pull Request:
 
 ```yaml
-name: CI
+name: CI Quality Gate
 on: [push, pull_request]
+
 jobs:
-  gates:
-    uses: your-org/agentic-factory/.github/workflows/reusable-guard-ci.yml@v1
+  agentic-guards:
+    uses: vantrangradion/agentic-factory/.github/workflows/reusable-guard-ci.yml@main
 ```
 
 ---
