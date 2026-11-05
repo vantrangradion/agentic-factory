@@ -127,6 +127,8 @@ export function scaffoldProject(options: ScaffoldOptions): void {
         enabled: true,
         targetDirs: isMonorepo ? ['packages', 'src'] : ['src'],
         forbiddenTerms: forbiddenJargon.length > 0 ? forbiddenJargon : ['internal_id', 'mutex_lock', 'deadlock'],
+        disallowEmDashes: true,
+        disallowEmojis: true,
       },
       secrets: {
         enabled: true,

@@ -17,6 +17,8 @@ export interface PlainLanguageConfig {
   targetDirs?: string[];
   forbiddenTerms?: string[];
   customMessage?: string;
+  disallowEmDashes?: boolean;
+  disallowEmojis?: boolean;
 }
 
 export interface SecretScanConfig {

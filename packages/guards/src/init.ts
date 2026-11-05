@@ -103,6 +103,8 @@ export function initFactoryConfig(
         enabled: true,
         targetDirs,
         forbiddenTerms: ['internal_id', 'mutex_lock', 'deadlock', 'ast_node', 'llm_hallucination'],
+        disallowEmDashes: true,
+        disallowEmojis: true,
       },
       secrets: {
         enabled: true,

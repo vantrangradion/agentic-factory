@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}} — Product & Technical Specification
+# {{PROJECT_NAME}}: Product & Technical Specification
 
 **Version:** 0.1.0-draft  
 **Status:** In Review  

@@ -1,4 +1,4 @@
-# Factory Model — Agent Guidelines & Project Rules
+# Factory Model: Agent Guidelines & Project Rules
 
 This document defines the development rules, architectural contracts, and context hygiene standards for this project.
 
@@ -36,6 +36,7 @@ To keep the agent's context window lean and fast:
   - Zero dead code or unused exports.
   - No commented-out code.
   - No `TODO` comments without an associated issue tracker link.
+  - Zero icons, emojis, or em dashes in CLI output, UI text, code comments, documentation, and agent communication.
 * **User-Facing Plain Language (UX Guard):**
   - Never expose internal system jargon or database errors to end users.
   - Plain language guard will fail the build if prohibited terms appear in user-facing surfaces.
