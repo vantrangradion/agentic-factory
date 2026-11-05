@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import { checkTodoIssueLinks } from './todo-issue-links.js';
 import { checkCommentedCode } from './commented-code.js';
 import { checkDeadExports } from './dead-exports.js';
+import { checkPlainLanguage } from './plain-language.js';
 import { formatGitHubAnnotation } from './github-annotations.js';
 
 describe('AI Drift AST Guards', () => {
@@ -146,6 +147,35 @@ describe('AI Drift AST Guards', () => {
       });
 
       expect(annotation).toBe('::warning file=packages/core/src/index.ts,line=42,col=1::Deprecation warning');
+    });
+  });
+
+  describe('Plain Language Anti-AI-Drift (Em Dashes and Emojis)', () => {
+    it('flags em dashes when disallowEmDashes is true', () => {
+      const styleDir = path.join(tmpDir, 'style-test');
+      fs.mkdirSync(styleDir, { recursive: true });
+      fs.writeFileSync(path.join(styleDir, 'component.ts'), 'export const text = "Welcome \u2014 sign in";');
+
+      const result = checkPlainLanguage(tmpDir, {
+        targetDirs: ['style-test'],
+        disallowEmDashes: true,
+      });
+
+      expect(result.hasViolations).toBe(true);
+      expect(result.violations[0]?.term).toContain('em-dash');
+    });
+
+    it('flags emojis when disallowEmojis is true', () => {
+      const styleDir = path.join(tmpDir, 'style-test');
+      fs.writeFileSync(path.join(styleDir, 'component.ts'), 'export const welcome = "Hello world! \u{1F680}";');
+
+      const result = checkPlainLanguage(tmpDir, {
+        targetDirs: ['style-test'],
+        disallowEmojis: true,
+      });
+
+      expect(result.hasViolations).toBe(true);
+      expect(result.violations[0]?.term).toContain('emoji');
     });
   });
 });

@@ -36,15 +36,15 @@ if (command === 'init') {
   const force = process.argv.includes('--force');
   const result = initFactoryConfig(projectRoot, { force });
   if (result.created) {
-    console.log(`\n✅ ${result.message}\n`);
+    console.log(`\nPASS: ${result.message}\n`);
     process.exit(0);
   } else {
-    console.error(`\n⚠️  ${result.message}\n`);
+    console.error(`\nWARN: ${result.message}\n`);
     process.exit(1);
   }
 }
 
-console.log(`\n🛡️  [Agentic Factory Guardrail Engine]`);
+console.log(`\n[Agentic Factory Guardrail Engine]`);
 console.log(`Directory: ${projectRoot}`);
 console.log(`Command:   ${command}\n`);
 
@@ -61,7 +61,7 @@ if (command === 'run' || command === 'cycles') {
   const result = checkNoCycles(projectRoot, config.guards?.noCycles);
   if (result.hasCycles) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.cycles.forEach((c, idx) => {
       console.error(`   Cycle ${idx + 1}: ${c.join(' -> ')}`);
       if (isGitHubActions && c[0]) {
@@ -69,7 +69,7 @@ if (command === 'run' || command === 'cycles') {
       }
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
 }
 
@@ -77,14 +77,14 @@ if (command === 'run' || command === 'boundaries') {
   const result = checkBoundaries(projectRoot, config.guards?.boundaries);
   if (result.hasViolations) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.violations.forEach((v) => {
       const msg = `forbidden import '${v.imported}' (rule: ${v.sourcePackage} cannot import ${v.forbiddenTarget})`;
       console.error(`   ${v.file}:${v.line} ${msg}`);
       reportError(v.file, v.line, 1, msg);
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
 }
 
@@ -92,14 +92,14 @@ if (command === 'run' || command === 'jargon') {
   const result = checkPlainLanguage(projectRoot, config.guards?.plainLanguage);
   if (result.hasViolations) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.violations.forEach((v) => {
       const msg = `prohibited term '${v.term}' in "${v.snippet}"`;
       console.error(`   ${v.file}:${v.line} ${msg}`);
       reportError(v.file, v.line, 1, msg);
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
 }
 
@@ -107,14 +107,14 @@ if (command === 'run' || command === 'secrets') {
   const result = checkSecrets(projectRoot, config.guards?.secrets);
   if (result.hasViolations) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.violations.forEach((v) => {
       const msg = `potential secret match (${v.pattern})`;
       console.error(`   ${v.file}:${v.line} ${msg}`);
       reportError(v.file, v.line, 1, msg);
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
 }
 
@@ -122,14 +122,14 @@ if (command === 'run' || command === 'todos') {
   const result = checkTodoIssueLinks(projectRoot, config.guards?.todoIssueLinks);
   if (result.hasViolations) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.violations.forEach((v) => {
       const msg = `TODO/FIXME missing issue tracker link: "${v.text}"`;
       console.error(`   ${v.file}:${v.line}:${v.col} ${msg}`);
       reportError(v.file, v.line, v.col, msg);
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
 }
 
@@ -137,14 +137,14 @@ if (command === 'run' || command === 'commented-code') {
   const result = checkCommentedCode(projectRoot, config.guards?.commentedCode);
   if (result.hasViolations) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.violations.forEach((v) => {
       const msg = `Commented-out code detected: "${v.snippet}"`;
       console.error(`   ${v.file}:${v.line}:${v.col} ${msg}`);
       reportError(v.file, v.line, v.col, msg);
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
 }
 
@@ -152,22 +152,22 @@ if (command === 'run' || command === 'dead-exports') {
   const result = checkDeadExports(projectRoot, config.guards?.deadExports);
   if (result.hasViolations) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.violations.forEach((v) => {
       const msg = `Unused/dead export '${v.symbol}'`;
       console.error(`   ${v.file}:${v.line}:${v.col} ${msg}`);
       reportError(v.file, v.line, v.col, msg);
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
 }
 
 console.log('');
 if (hasAnyFailure) {
-  console.error(`🚫 Factory Quality Gates FAILED. Review violations above.\n`);
+  console.error(`FAILED: Quality gates failed. Review violations above.\n`);
   process.exit(1);
 } else {
-  console.log(`🎉 All Factory Quality Gates PASSED with 0 violations.\n`);
+  console.log(`SUCCESS: All quality gates passed with 0 violations.\n`);
   process.exit(0);
 }

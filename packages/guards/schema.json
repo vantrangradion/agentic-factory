@@ -38,7 +38,9 @@
           "properties": {
             "enabled": { "type": "boolean" },
             "targetDirs": { "type": "array", "items": { "type": "string" } },
-            "forbiddenTerms": { "type": "array", "items": { "type": "string" } }
+            "forbiddenTerms": { "type": "array", "items": { "type": "string" } },
+            "disallowEmDashes": { "type": "boolean" },
+            "disallowEmojis": { "type": "boolean" }
           }
         },
         "secrets": {

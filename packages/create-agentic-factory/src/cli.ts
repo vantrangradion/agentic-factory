@@ -22,7 +22,7 @@ async function main() {
   let options: ScaffoldOptions;
 
   if (isExplicitInteractive || isNoArgsInteractive) {
-    console.log(`\n🏭 Interactive Setup: Project-Agnostic Agentic Software Factory\n`);
+    console.log(`\nInteractive Setup: Project-Agnostic Agentic Software Factory\n`);
     options = await promptOptions();
   } else {
     const targetInput = args.find((a) => !a.startsWith('-')) || 'my-agentic-app';
@@ -56,14 +56,14 @@ async function main() {
     };
   }
 
-  console.log(`\n🏭 Initializing Project-Agnostic Agentic Factory...`);
+  console.log(`\nInitializing Project-Agnostic Agentic Factory...`);
   console.log(`Target:       ${options.targetDir}`);
   console.log(`Project:      ${options.projectName}`);
   console.log(`Architecture: ${options.architecture}\n`);
 
   scaffoldProject(options);
 
-  console.log(`✨ Successfully scaffolded Agentic Factory in ${options.targetDir}`);
+  console.log(`Successfully scaffolded Agentic Factory in ${options.targetDir}`);
   console.log(`\nNext steps:`);
   console.log(`  cd ${path.relative(process.cwd(), options.targetDir) || '.'}`);
   console.log(`  pnpm install`);
@@ -72,6 +72,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(`\n❌ Error: ${err.message}\n`);
+  console.error(`\nError: ${err.message}\n`);
   process.exit(1);
 });

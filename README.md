@@ -1,4 +1,4 @@
-# 🏭 Agentic Factory
+# Agentic Factory
 
 > **The Project-Agnostic Software Factory and Harness Engine for Agentic Software Development.**
 
@@ -9,13 +9,13 @@
 
 ## What is Agentic Factory?
 
-When building software with AI coding agents, **the AI model is only 10%** of the equation—the remaining **90% is the harness** (tooling, AST guardrails, synthetic test doubles, and architectural boundaries).
+When building software with AI coding agents, **the AI model is only 10%** of the equation: the remaining **90% is the harness** (tooling, AST guardrails, synthetic test doubles, and architectural boundaries).
 
 `agentic-factory` provides that missing 90%:
-* 🛡️ **Automated Guardrails (`@agentic-factory/guards`):** Pure-TypeScript AST cycle detection, package boundary enforcement, plain-language UX checks, and secret scanning.
-* 🧪 **Synthetic Testing Harness (`@agentic-factory/harness`):** Seeded PRNG, virtual clocks, and contract test runners (zero PII, zero flakiness).
-* 🤖 **Antigravity IDE Plugin:** Pre-bundled SDLC skills and autonomous subagents (`SpecArchitect`, `HarnessEngineer`, `GuardEnforcer`).
-* 🚀 **Turnkey Scaffolder (`create-agentic-factory`):** Monorepo generator configured with composite TypeScript, BDD docs, and boundary rules.
+* **Automated Guardrails (`@agentic-factory/guards`):** Pure-TypeScript AST cycle detection, package boundary enforcement, plain-language UX checks, and secret scanning.
+* **Synthetic Testing Harness (`@agentic-factory/harness`):** Seeded PRNG, virtual clocks, and contract test runners (zero PII, zero flakiness).
+* **Antigravity IDE Plugin:** Pre-bundled SDLC skills and autonomous subagents (`SpecArchitect`, `HarnessEngineer`, `GuardEnforcer`).
+* **Turnkey Scaffolder (`create-agentic-factory`):** Monorepo generator configured with composite TypeScript, BDD docs, and boundary rules.
 
 ---
 
@@ -48,13 +48,13 @@ This sets up:
 
 Add deterministic architectural guards to any current codebase:
 
-**Step 1 — Install the guard engine:**
+**Step 1: Install the guard engine:**
 ```bash
 pnpm add -D @agentic-factory/guards
 ```
 *(Or link locally: `"@agentic-factory/guards": "link:../agentic-factory/packages/guards"`)*
 
-**Step 2 — Add `.factoryrc.json` to your project root:**
+**Step 2: Add `.factoryrc.json` to your project root:**
 ```json
 {
   "$schema": "https://agentic-factory.dev/schema.json",
@@ -69,14 +69,16 @@ pnpm add -D @agentic-factory/guards
     ],
     "plainLanguage": {
       "targetDirs": ["packages/ui", "packages/cli"],
-      "forbiddenTerms": ["deadlock", "db_pool", "internal_id"]
+      "forbiddenTerms": ["deadlock", "db_pool", "internal_id"],
+      "disallowEmDashes": true,
+      "disallowEmojis": true
     },
     "secrets": { "enabled": true }
   }
 }
 ```
 
-**Step 3 — Run the guards:**
+**Step 3: Run the guards:**
 ```bash
 pnpm agentic-guards run
 ```
@@ -97,10 +99,10 @@ ln -sfn ~/agentic-factory/plugin ~/.gemini/config/plugins/agentic-factory
 ```
 
 **Instant access to skills & subagents in chat:**
-* `/agentic-sdlc` — SDLC rules and harness engineering principles.
-* `/factory-harness` — 5-phase harness setup checklists.
-* `/architecture-decision` — ADR trade-off analyzer.
-* `/user-story-authoring` — Spec-to-BDD story decomposition.
+* `/agentic-sdlc`: SDLC rules and harness engineering principles.
+* `/factory-harness`: 5-phase harness setup checklists.
+* `/architecture-decision`: ADR trade-off analyzer.
+* `/user-story-authoring`: Spec-to-BDD story decomposition.
 * **Subagents:** `SpecArchitect`, `HarnessEngineer`, `GuardEnforcer`.
 
 ---

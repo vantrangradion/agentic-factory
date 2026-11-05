@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}} — Factory Model & Harness Engineering Setup Checklist
+# {{PROJECT_NAME}}: Factory Model & Harness Engineering Setup Checklist
 
 **Milestone:** Sprint 0 / Foundation Setup  
 **Core Law:** $\mathbf{Agent = Model + Harness}$
