@@ -14,7 +14,7 @@ When building software with AI coding agents, **the AI model is only 10%** of th
 `agentic-factory` provides that missing 90%:
 * **Automated Guardrails (`@agentic-factory/guards`):** Pure-TypeScript AST cycle detection, package boundary enforcement, plain-language UX checks, and secret scanning.
 * **Synthetic Testing Harness (`@agentic-factory/harness`):** Seeded PRNG, virtual clocks, and contract test runners (zero PII, zero flakiness).
-* **Antigravity IDE Plugin:** Pre-bundled SDLC skills and autonomous subagents (`SpecArchitect`, `HarnessEngineer`, `GuardEnforcer`).
+* **Antigravity IDE Plugin:** Pre-bundled SDLC skills and autonomous subagents (`SpecArchitect`, `HarnessEngineer`, `GuardEnforcer`, `AdversarialReviewer`).
 * **Turnkey Scaffolder (`create-agentic-factory`):** Monorepo generator configured with composite TypeScript, BDD docs, and boundary rules.
 
 ---
@@ -103,7 +103,8 @@ ln -sfn ~/agentic-factory/plugin ~/.gemini/config/plugins/agentic-factory
 * `/factory-harness`: 5-phase harness setup checklists.
 * `/architecture-decision`: ADR trade-off analyzer.
 * `/user-story-authoring`: Spec-to-BDD story decomposition.
-* **Subagents:** `SpecArchitect`, `HarnessEngineer`, `GuardEnforcer`.
+* **Subagents:** `SpecArchitect`, `HarnessEngineer`, `GuardEnforcer`, `AdversarialReviewer`.
+* **The 6-Step Story Lifecycle:** Context & Implementation Plan -> Red Phase (TDD) -> Green Phase (Self-Healing) -> Guard Phase (`agentic-guards`) -> Adversarial Audit -> Human Sign-Off.
 
 ---
 
