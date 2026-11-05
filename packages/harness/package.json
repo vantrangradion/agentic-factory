@@ -8,6 +8,9 @@
     "build": "tsc -b",
     "test": "vitest run"
   },
+  "files": [
+    "dist"
+  ],
   "devDependencies": {
     "@types/node": "^22.10.1",
     "typescript": "^5.7.2",

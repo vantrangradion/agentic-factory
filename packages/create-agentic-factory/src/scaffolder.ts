@@ -33,15 +33,23 @@ export function scaffoldProject(options: ScaffoldOptions): void {
   const { projectName, targetDir, architecture, forbiddenJargon = [] } = options;
   fs.mkdirSync(targetDir, { recursive: true });
 
-  // Locate template path relative to package root
-  const templateDir = path.resolve(__dirname, '../../templates/modular-monorepo');
+  // Locate template path relative to package root or bundled dist
+  const candidateDirs = [
+    path.resolve(__dirname, 'templates/modular-monorepo'),
+    path.resolve(__dirname, '../templates/modular-monorepo'),
+    path.resolve(__dirname, '../../templates/modular-monorepo'),
+    path.resolve(__dirname, '../../../templates/modular-monorepo'),
+  ];
+  const templateDir = candidateDirs.find((dir) => fs.existsSync(dir));
 
-  if (fs.existsSync(templateDir)) {
-    copyDirSync(templateDir, targetDir, {
-      '{{PROJECT_NAME}}': projectName,
-      '{{ARCHITECTURE}}': architecture,
-    });
+  if (!templateDir) {
+    throw new Error(`Template directory for architecture '${architecture}' could not be located.`);
   }
+
+  copyDirSync(templateDir, targetDir, {
+    '{{PROJECT_NAME}}': projectName,
+    '{{ARCHITECTURE}}': architecture,
+  });
 
   // Write tailored .factoryrc.json
   const factoryConfig = {

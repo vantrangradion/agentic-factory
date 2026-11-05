@@ -8,9 +8,13 @@
     "agentic-guards": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && chmod +x dist/cli.js",
     "test": "vitest run"
   },
+  "files": [
+    "dist",
+    "schema.json"
+  ],
   "devDependencies": {
     "@types/node": "^22.10.1",
     "typescript": "^5.7.2",

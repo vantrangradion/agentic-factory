@@ -8,9 +8,12 @@
     "create-agentic-factory": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && mkdir -p dist/templates && cp -r ../../templates/* dist/templates/ && chmod +x dist/cli.js",
     "test": "vitest run"
   },
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "@agentic-factory/guards": "workspace:*",
     "@agentic-factory/harness": "workspace:*"
