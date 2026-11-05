@@ -1,108 +1,64 @@
 # 🏭 Agentic Factory
 
-> **The Project-Agnostic, Globally Reusable Software Factory Engine for Agentic Software Development.**
+> **The Project-Agnostic Software Factory and Harness Engine for Agentic Software Development.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript: Strict](https://img.shields.io/badge/TypeScript-5.7_Strict-blue)](tsconfig.base.json)
 
 ---
 
-## Executive Summary
+## What is Agentic Factory?
 
-Per the **Factory Model** framework (*"The New SDLC With Vibe Coding"*, Google 2026):
+When building software with AI coding agents, **the AI model is only 10%** of the equation—the remaining **90% is the harness** (tooling, AST guardrails, synthetic test doubles, and architectural boundaries).
 
-$$\mathbf{Agent = Model + Harness}$$
-
-* **The Model (~10%):** Off-the-shelf foundation reasoning engine.
-* **The Harness (~90%):** The scaffolding, sandboxes, tools, deterministic linters, and synthetic test suites constructed by the developer.
-* **Capital Expenditure (CapEx) Inversion:** Invest upfront in reusable harness scaffolding, deterministic AST guardrails, and contract test runners to achieve ultra-low operational cost (OpEx)—sustainable feature delivery with zero regression drift.
-
-`agentic-factory` provides the **universal assembly line**. Any software project (fintech gateway, messaging pipeline, web application, microservice, or CLI tool) can instantiate this factory in seconds.
+`agentic-factory` provides that missing 90%:
+* 🛡️ **Automated Guardrails (`@agentic-factory/guards`):** Pure-TypeScript AST cycle detection, package boundary enforcement, plain-language UX checks, and secret scanning.
+* 🧪 **Synthetic Testing Harness (`@agentic-factory/harness`):** Seeded PRNG, virtual clocks, and contract test runners (zero PII, zero flakiness).
+* 🤖 **Antigravity IDE Plugin:** Pre-bundled SDLC skills and autonomous subagents (`SpecArchitect`, `HarnessEngineer`, `GuardEnforcer`).
+* 🚀 **Turnkey Scaffolder (`create-agentic-factory`):** Monorepo generator configured with composite TypeScript, BDD docs, and boundary rules.
 
 ---
 
-## Architecture & Monorepo Topology
+## Quick Start: 4 Ways to Use It
 
-```mermaid
-flowchart TD
-    subgraph Core["Universal Factory Engine"]
-        CLI["packages/create-agentic-factory\n(Turnkey Scaffolder CLI)"]
-        Guards["packages/guards\n(@agentic-factory/guards AST Engine)"]
-        Harness["packages/harness\n(@agentic-factory/harness Test Doubles)"]
-    end
+### 1. Scaffold a New Project
 
-    subgraph Plugin["Antigravity IDE Plugin"]
-        P["plugin/\n(5 SDLC Skills + 3 Autonomous Subagents)"]
-    end
+Generate a production-ready, agent-friendly project in one command:
 
-    subgraph CI["Continuous Integration"]
-        GHA[".github/workflows/reusable-guard-ci.yml\n(Reusable CI Quality Gates)"]
-    end
-
-    CLI -->|Scaffolds| NewProject["Any New/Existing Project"]
-    Guards -->|Enforces Invariants| NewProject
-    Harness -->|Synthetic Scenarios| NewProject
-    P -->|Guides AI Agents| NewProject
-    GHA -->|Blocks PR Regressions| NewProject
-```
-
----
-
-## Global Distribution Packages
-
-| Package / Artifact | Type | Purpose |
-| :--- | :--- | :--- |
-| **`create-agentic-factory`** | NPM CLI Executable | Run `npx create-agentic-factory <target>` to generate a complete Factory codebase. |
-| **`@agentic-factory/guards`** | NPM Library & CLI | Deterministic AST checkers: zero import cycles, boundary isolation, UX anti-jargon, secret scan. |
-| **`@agentic-factory/harness`** | NPM Library | Deterministic testing doubles: `ScenarioBuilder`, `MockClock`, `PRNG`, and `executeContractSuite`. |
-| **`agentic-factory` Plugin** | Antigravity IDE Plugin | Global plugin bundling 5 SDLC skills (`agentic-sdlc`, `factory-harness`, `architecture-decision`, `user-story-authoring`, `practical-test-pyramid`) and 3 subagents. |
-| **`reusable-guard-ci.yml`** | GitHub Action | Plug-and-play workflow ensuring no PR can merge with boundary violations or missing TDD evidence. |
-
----
-
-## 1. Quick Start: Scaffolding a New Project
-
-### Option A: From NPM (Published)
 ```bash
-npx create-agentic-factory my-payment-service --arch modular-monorepo --jargon "deadlock,mutex,sql_error"
-```
+# From NPM (published):
+npx create-agentic-factory my-app --arch modular-monorepo
 
-### Option B: Directly from GitHub Clone
-```bash
+# Or directly from source:
 git clone https://github.com/vantrangradion/agentic-factory.git
 cd agentic-factory && pnpm install && pnpm build
-
-# Run the scaffolder anywhere:
-node packages/create-agentic-factory/dist/cli.js my-payment-service --arch modular-monorepo
+node packages/create-agentic-factory/dist/cli.js my-app --arch modular-monorepo
 ```
 
-This generates:
-* **`pnpm-workspace.yaml`** and composite **`tsconfig.json`** for sub-second incremental compilation.
-* **`packages/types`**: Domain contract package with zero runtime dependencies.
-* **`packages/testing`**: Seeded synthetic scenario runner and contract test suites.
-* **`docs/`**: `spec.md`, `user-stories.md` (BDD Gherkin), `decisions/` (ADR framework), and `factory-model-setup.md`.
-* **`.factoryrc.json`**: Config-driven boundary enforcement and UX jargon dictionary.
-* **`.agents/rules/AGENTS.md`**: Inviolable agent rules and privacy invariants.
+This sets up:
+* Composite `tsconfig.json` & `pnpm-workspace.yaml` (sub-second incremental builds)
+* Pure domain contract package (`packages/types`)
+* Seeded synthetic scenario runner (`packages/testing`)
+* Standard docs (`spec.md`, `user-stories.md` with BDD Gherkin, ADR decisions)
+* Invariant guard configuration (`.factoryrc.json`)
 
 ---
 
-## 2. Using `@agentic-factory/guards` in Any Existing Project
+### 2. Add Guards to an Existing Project
 
-Install the guard engine:
+Add deterministic architectural guards to any current codebase:
 
+**Step 1 — Install the guard engine:**
 ```bash
 pnpm add -D @agentic-factory/guards
 ```
+*(Or link locally: `"@agentic-factory/guards": "link:../agentic-factory/packages/guards"`)*
 
-Add `.factoryrc.json` to your project root:
-
+**Step 2 — Add `.factoryrc.json` to your project root:**
 ```json
 {
   "$schema": "https://agentic-factory.dev/schema.json",
-  "project": {
-    "name": "my-service",
-    "architecture": "modular-monorepo"
-  },
+  "project": { "name": "my-app", "architecture": "modular-monorepo" },
   "guards": {
     "noCycles": { "enabled": true, "rootDir": "packages" },
     "boundaries": [
@@ -120,26 +76,63 @@ Add `.factoryrc.json` to your project root:
 }
 ```
 
-Run in `package.json`:
-
+**Step 3 — Run the guards:**
 ```bash
 pnpm agentic-guards run
 ```
 
 ---
 
-## 3. Synthetic Testing with `@agentic-factory/harness`
+### 3. Enable the Antigravity IDE Plugin
 
-Avoid flakiness, race conditions, or leaking real customer data:
+Equip your Antigravity IDE with global factory intelligence across all your projects:
+
+```bash
+# Clone the repository
+git clone https://github.com/vantrangradion/agentic-factory.git ~/agentic-factory
+
+# Link to Antigravity's global plugin directory
+mkdir -p ~/.gemini/config/plugins
+ln -sfn ~/agentic-factory/plugin ~/.gemini/config/plugins/agentic-factory
+```
+
+**Instant access to skills & subagents in chat:**
+* `/agentic-sdlc` — SDLC rules and harness engineering principles.
+* `/factory-harness` — 5-phase harness setup checklists.
+* `/architecture-decision` — ADR trade-off analyzer.
+* `/user-story-authoring` — Spec-to-BDD story decomposition.
+* **Subagents:** `SpecArchitect`, `HarnessEngineer`, `GuardEnforcer`.
+
+---
+
+### 4. Enforce Quality Gates in GitHub CI
+
+Block regressions automatically on every Pull Request:
+
+```yaml
+# .github/workflows/ci.yml
+name: CI Quality Gate
+on: [push, pull_request]
+
+jobs:
+  agentic-guards:
+    uses: vantrangradion/agentic-factory/.github/workflows/reusable-guard-ci.yml@main
+```
+
+---
+
+## Synthetic Testing Example
+
+Write deterministic, zero-PII unit tests using `@agentic-factory/harness`:
 
 ```typescript
 import { ScenarioBuilder, MockClock, PRNG } from '@agentic-factory/harness';
 
-// Reproducible test fixture with deterministic time advance
+// Reproducible fixture with deterministic time advance
 const clock = new MockClock(1700000000000);
 const builder = new ScenarioBuilder<PaymentEvent>(42);
 
-const events = builder.generate(10, (idx, prng, clock) => ({
+const events = builder.generate(5, (idx, prng, clock) => ({
   transactionId: prng.uuid(),
   amount: prng.nextInt(10, 500),
   timestamp: clock.now(),
@@ -148,39 +141,21 @@ const events = builder.generate(10, (idx, prng, clock) => ({
 
 ---
 
-## 4. Enabling the Global Antigravity Plugin
+## Architecture
 
-To equip your Antigravity IDE with global factory intelligence across all workspaces:
+```mermaid
+flowchart LR
+    Guards["packages/guards\n(AST & Boundary Linter)"]
+    Harness["packages/harness\n(Deterministic Test Doubles)"]
+    CLI["packages/create-agentic-factory\n(Monorepo Scaffolder)"]
+    Plugin["plugin/\n(IDE Skills & Subagents)"]
+    CI[".github/workflows/\n(Reusable Quality Gates)"]
 
-```bash
-# Clone the repository (if not already cloned)
-git clone https://github.com/vantrangradion/agentic-factory.git ~/agentic-factory
-
-# Symlink the plugin bundle to Antigravity's global plugin directory
-mkdir -p ~/.gemini/config/plugins
-ln -sfn ~/agentic-factory/plugin ~/.gemini/config/plugins/agentic-factory
-```
-
-Once linked, all your projects immediately have access to:
-* `/agentic-sdlc`: Procedural rules from *The New SDLC*.
-* `/factory-harness`: 5-Phase setup checklists.
-* `/architecture-decision`: ADR trade-off analyzer.
-* `/user-story-authoring`: Spec-to-BDD decomposition engine.
-* Subagents: `SpecArchitect`, `HarnessEngineer`, and `GuardEnforcer`.
-
----
-
-## 5. Reusable CI/CD Pipeline
-
-Add `.github/workflows/ci.yml` in your consuming repository to enforce guardrails automatically on every Pull Request:
-
-```yaml
-name: CI Quality Gate
-on: [push, pull_request]
-
-jobs:
-  agentic-guards:
-    uses: vantrangradion/agentic-factory/.github/workflows/reusable-guard-ci.yml@main
+    Guards --> TargetApp["Your Project"]
+    Harness --> TargetApp
+    CLI --> TargetApp
+    Plugin --> TargetApp
+    CI --> TargetApp
 ```
 
 ---
