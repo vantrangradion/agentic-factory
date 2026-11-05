@@ -6,9 +6,13 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   publish:
-    name: Publish Packages to NPM
+    name: Publish Packages to NPM & GitHub Packages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -40,4 +44,13 @@ jobs:
         run: pnpm -r publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to GitHub Packages
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+          echo "@agentic-factory:registry=https://npm.pkg.github.com" >> ~/.npmrc
+          pnpm --filter "@agentic-factory/*" publish --registry https://npm.pkg.github.com --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 

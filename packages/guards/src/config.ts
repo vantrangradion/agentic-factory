@@ -26,6 +26,26 @@ export interface SecretScanConfig {
   entropyThreshold?: number;
 }
 
+export interface TodoIssueConfig {
+  enabled?: boolean;
+  targetDirs?: string[];
+  exclude?: string[];
+  issuePattern?: string;
+}
+
+export interface CommentedCodeConfig {
+  enabled?: boolean;
+  targetDirs?: string[];
+  exclude?: string[];
+}
+
+export interface DeadExportsConfig {
+  enabled?: boolean;
+  rootDir?: string;
+  entryPoints?: string[];
+  exclude?: string[];
+}
+
 export interface FactoryConfig {
   $schema?: string;
   project?: {
@@ -37,6 +57,9 @@ export interface FactoryConfig {
     boundaries?: BoundaryRule[];
     plainLanguage?: PlainLanguageConfig;
     secrets?: SecretScanConfig;
+    todoIssueLinks?: TodoIssueConfig;
+    commentedCode?: CommentedCodeConfig;
+    deadExports?: DeadExportsConfig;
   };
   testing?: {
     targetCoverage?: number;
@@ -81,6 +104,9 @@ export function loadFactoryConfig(startDir: string = process.cwd()): FactoryConf
       boundaries: [],
       plainLanguage: { enabled: true, targetDirs: ['src'], forbiddenTerms: [] },
       secrets: { enabled: true },
+      todoIssueLinks: { enabled: true },
+      commentedCode: { enabled: true },
+      deadExports: { enabled: true },
     },
   };
 }
