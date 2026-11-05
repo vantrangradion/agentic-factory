@@ -29,3 +29,4 @@ describe('Scaffolder Engine', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 });
+

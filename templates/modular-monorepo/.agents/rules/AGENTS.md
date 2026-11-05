@@ -39,3 +39,4 @@ To keep the agent's context window lean and fast:
 * **User-Facing Plain Language (UX Guard):**
   - Never expose internal system jargon or database errors to end users.
   - Plain language guard will fail the build if prohibited terms appear in user-facing surfaces.
+

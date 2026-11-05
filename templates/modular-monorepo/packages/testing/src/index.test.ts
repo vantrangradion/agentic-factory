@@ -11,3 +11,4 @@ describe('Synthetic Scenario Harness', () => {
     expect(events1[0]!.payload).toBe('synthetic-payload-0');
   });
 });
+

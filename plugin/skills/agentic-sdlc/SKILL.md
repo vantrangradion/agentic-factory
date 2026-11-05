@@ -34,3 +34,4 @@ Use this skill whenever structuring AI agent workflows, designing harness scaffo
 * **Orchestrator Mode (Asynchronous / Goal-Driven):**
   - Use when implementing well-specified stories (`docs/user-stories.md`), running contract test suites, or performing migrations.
   - Goal-level instruction, multi-file execution, sandbox test runs, review PR/diff outcomes rather than typing.
+

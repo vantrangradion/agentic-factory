@@ -42,3 +42,4 @@ Defined in [`packages/types/src/index.ts`](../packages/types/src/index.ts).
 * **Performance:** Unit test suite must execute in $< 2$ seconds.
 * **Security:** All endpoints validated with strict schemas; secrets scanned pre-commit.
 * **Reliability:** Idempotent retry logic and circuit breakers for external network boundaries.
+

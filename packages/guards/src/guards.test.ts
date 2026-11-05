@@ -34,3 +34,4 @@ describe('Factory Guard Engine', () => {
     expect(result.hasViolations).toBe(false);
   });
 });
+

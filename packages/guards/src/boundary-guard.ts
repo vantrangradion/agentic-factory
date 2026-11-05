@@ -96,3 +96,4 @@ export function checkBoundaries(projectRoot: string, rules: BoundaryRule[] = [])
 
   return { hasViolations, violations, summary };
 }
+

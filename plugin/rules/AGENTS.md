@@ -7,3 +7,4 @@ These invariants govern all agentic software development across any project usin
 3. **Test-Driven Development (TDD):** Red run (verified failing test) $\rightarrow$ Green run (minimal passing implementation) $\rightarrow$ Guard verification.
 4. **Privacy & Security by Design:** Never request, store, or log real customer PII, phone numbers, or credentials. Use synthetic generators (`@agentic-factory/harness`).
 5. **No Architectural Bypass:** Never bypass package boundaries or introduce circular dependencies.
+

@@ -17,3 +17,4 @@ export interface BaseEvent<T = unknown> {
   readonly type: string;
   readonly payload: T;
 }
+

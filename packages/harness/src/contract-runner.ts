@@ -45,3 +45,4 @@ export async function executeContractSuite<T>(
     failures,
   };
 }
+

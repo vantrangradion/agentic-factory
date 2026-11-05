@@ -50,3 +50,4 @@ export class PRNG {
     return `${s4()}${s4()}-${s4()}-4${s4().substr(0, 3)}-8${s4().substr(0, 3)}-${s4()}${s4()}${s4()}`;
   }
 }
+

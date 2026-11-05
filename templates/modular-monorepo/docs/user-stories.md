@@ -40,3 +40,4 @@ Feature: Data Processing
     Then the status should be "COMPLETED"
     And an audit event should be recorded
 ```
+

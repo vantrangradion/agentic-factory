@@ -79,3 +79,4 @@ export function scaffoldProject(options: ScaffoldOptions): void {
 
   fs.writeFileSync(path.join(targetDir, '.factoryrc.json'), JSON.stringify(factoryConfig, null, 2), 'utf-8');
 }
+

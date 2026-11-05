@@ -10,3 +10,4 @@ export function createSyntheticEventScenario(count: number = 5, seed: number = 4
     payload: `synthetic-payload-${idx}`,
   })).build();
 }
+

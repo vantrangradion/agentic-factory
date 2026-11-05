@@ -38,3 +38,4 @@ jobs:
 
       - name: Run Synthetic Scenarios & Contract Suites
         run: pnpm test
+

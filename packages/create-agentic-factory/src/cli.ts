@@ -50,3 +50,4 @@ console.log(`  cd ${targetInput}`);
 console.log(`  pnpm install`);
 console.log(`  pnpm guard      # Run deterministic AST boundary and cycle checks`);
 console.log(`  pnpm test       # Run synthetic scenario and contract test suites\n`);
+

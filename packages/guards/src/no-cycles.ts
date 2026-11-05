@@ -133,3 +133,4 @@ export function checkNoCycles(projectRoot: string, config?: NoCyclesConfig): Cyc
 
   return { hasCycles, cycles: detectedCycles, summary };
 }
+

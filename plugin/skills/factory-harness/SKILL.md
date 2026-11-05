@@ -45,3 +45,4 @@ Execute the complete verification pipeline before writing any production feature
 pnpm clean && pnpm build && pnpm guard && pnpm test
 ```
 All packages must compile with zero warnings, all guards pass, and test suite completes in under 2 seconds.
+
