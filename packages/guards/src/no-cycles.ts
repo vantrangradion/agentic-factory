@@ -82,7 +82,7 @@ function collectSourceFiles(dir: string, exclude: string[] = []): string[] {
 
 export function checkNoCycles(projectRoot: string, config?: NoCyclesConfig): CycleResult {
   if (config?.enabled === false) {
-    return { hasCycles: false, cycles: [], summary: 'Cycle guard disabled in config' };
+    return { hasCycles: false, cycles: [], summary: 'PASS: Cycle guard disabled in config' };
   }
 
   const rootDir = path.resolve(projectRoot, config?.rootDir || '.');

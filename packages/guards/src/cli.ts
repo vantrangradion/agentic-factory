@@ -10,11 +10,14 @@ import { checkDeadExports } from './dead-exports.js';
 import { formatGitHubAnnotation } from './github-annotations.js';
 import { initFactoryConfig } from './init.js';
 
-const command = process.argv[2] || 'run';
+const args = process.argv.slice(2);
+const isHelp = args.includes('--help') || args.includes('-h');
+const isGitHubActions = process.env.GITHUB_ACTIONS === 'true' || args.includes('--github');
+const positionalArgs = args.filter((a) => !a.startsWith('-'));
+const command = positionalArgs[0] || 'run';
 const projectRoot = process.cwd();
-const isGitHubActions = process.env.GITHUB_ACTIONS === 'true' || process.argv.includes('--github');
 
-if (command === '--help' || command === '-h') {
+if (isHelp) {
   console.log(`\nUsage: agentic-guards <command> [options]\n`);
   console.log(`Commands:`);
   console.log(`  run             Execute all enabled guards`);
@@ -32,8 +35,25 @@ if (command === '--help' || command === '-h') {
   process.exit(0);
 }
 
+const VALID_COMMANDS = new Set([
+  'run',
+  'init',
+  'cycles',
+  'boundaries',
+  'jargon',
+  'secrets',
+  'todos',
+  'commented-code',
+  'dead-exports',
+]);
+
+if (!VALID_COMMANDS.has(command)) {
+  console.error(`\nFAILED: Unknown command '${command}'. Run 'agentic-guards --help' for available commands.\n`);
+  process.exit(1);
+}
+
 if (command === 'init') {
-  const force = process.argv.includes('--force');
+  const force = args.includes('--force');
   const result = initFactoryConfig(projectRoot, { force });
   if (result.created) {
     console.log(`\nPASS: ${result.message}\n`);
