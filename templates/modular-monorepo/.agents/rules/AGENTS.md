@@ -40,4 +40,8 @@ To keep the agent's context window lean and fast:
 * **User-Facing Plain Language (UX Guard):**
   - Never expose internal system jargon or database errors to end users.
   - Plain language guard will fail the build if prohibited terms appear in user-facing surfaces.
+* **Automated PR & Review Workflow:**
+  - When assigned a task or user story, the agent executes the complete 6-step lifecycle autonomously (Red -> Green -> Guard -> Adversarial Audit).
+  - Creates a dedicated feature branch, pushes to the remote, and opens a Pull Request via GitHub CLI (`gh pr create`).
+  - PR descriptions must include full Red-to-Green test logs, guard passes, and adversarial audit summaries for developer sign-off.
 
