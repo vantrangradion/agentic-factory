@@ -47,6 +47,32 @@
             "enabled": { "type": "boolean" },
             "patterns": { "type": "array", "items": { "type": "string" } }
           }
+        },
+        "todoIssueLinks": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "targetDirs": { "type": "array", "items": { "type": "string" } },
+            "exclude": { "type": "array", "items": { "type": "string" } },
+            "issuePattern": { "type": "string" }
+          }
+        },
+        "commentedCode": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "targetDirs": { "type": "array", "items": { "type": "string" } },
+            "exclude": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "deadExports": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "rootDir": { "type": "string" },
+            "entryPoints": { "type": "array", "items": { "type": "string" } },
+            "exclude": { "type": "array", "items": { "type": "string" } }
+          }
         }
       }
     },

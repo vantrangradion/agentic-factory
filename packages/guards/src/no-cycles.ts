@@ -20,6 +20,13 @@ function resolveImportPath(containingFile: string, moduleSpecifier: string): str
   if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
     return candidate;
   }
+  const stripCandidate = candidate.replace(/\.(js|jsx)$/, '');
+  for (const ext of extensions) {
+    const full = stripCandidate + ext;
+    if (fs.existsSync(full) && fs.statSync(full).isFile()) {
+      return full;
+    }
+  }
   for (const ext of extensions) {
     const full = candidate + ext;
     if (fs.existsSync(full) && fs.statSync(full).isFile()) {

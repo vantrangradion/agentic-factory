@@ -1,11 +1,59 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as readline from 'node:readline/promises';
+import { Readable, Writable } from 'node:stream';
+
+export type ArchitecturePreset = 'modular-monorepo' | 'single-package' | 'hexagonal' | 'microservice';
 
 export interface ScaffoldOptions {
   projectName: string;
   targetDir: string;
-  architecture: 'modular-monorepo' | 'hexagonal' | 'microservice';
+  architecture: ArchitecturePreset;
   forbiddenJargon?: string[];
+}
+
+export interface PromptOptionsInput {
+  input?: Readable;
+  output?: Writable;
+  defaultName?: string;
+}
+
+export async function promptOptions(options: PromptOptionsInput = {}): Promise<ScaffoldOptions> {
+  const rl = readline.createInterface({
+    input: options.input || process.stdin,
+    output: options.output || process.stdout,
+  });
+
+  try {
+    const rawName = await rl.question(`Project directory name (${options.defaultName || 'my-agentic-app'}): `);
+    const projectName = rawName.trim() || options.defaultName || 'my-agentic-app';
+    const targetDir = path.resolve(process.cwd(), projectName);
+
+    const rawArch = await rl.question(
+      `Select architecture preset:\n  1) modular-monorepo (default)\n  2) single-package\nChoice (1/2): `
+    );
+    const archChoice = rawArch.trim();
+    let architecture: ArchitecturePreset = 'modular-monorepo';
+    if (archChoice === '2' || archChoice.toLowerCase() === 'single-package') {
+      architecture = 'single-package';
+    }
+
+    const rawJargon = await rl.question(
+      `Forbidden plain language terms (comma-separated, or press Enter to skip): `
+    );
+    const forbiddenJargon = rawJargon.trim()
+      ? rawJargon.split(',').map((t) => t.trim()).filter(Boolean)
+      : [];
+
+    return {
+      projectName: path.basename(targetDir),
+      targetDir,
+      architecture,
+      forbiddenJargon,
+    };
+  } finally {
+    rl.close();
+  }
 }
 
 export function copyDirSync(src: string, dest: string, replacements: Record<string, string> = {}) {
@@ -33,12 +81,14 @@ export function scaffoldProject(options: ScaffoldOptions): void {
   const { projectName, targetDir, architecture, forbiddenJargon = [] } = options;
   fs.mkdirSync(targetDir, { recursive: true });
 
+  const templateName = architecture === 'single-package' ? 'single-package' : 'modular-monorepo';
+
   // Locate template path relative to package root or bundled dist
   const candidateDirs = [
-    path.resolve(__dirname, 'templates/modular-monorepo'),
-    path.resolve(__dirname, '../templates/modular-monorepo'),
-    path.resolve(__dirname, '../../templates/modular-monorepo'),
-    path.resolve(__dirname, '../../../templates/modular-monorepo'),
+    path.resolve(__dirname, `templates/${templateName}`),
+    path.resolve(__dirname, `../templates/${templateName}`),
+    path.resolve(__dirname, `../../templates/${templateName}`),
+    path.resolve(__dirname, `../../../templates/${templateName}`),
   ];
   const templateDir = candidateDirs.find((dir) => fs.existsSync(dir));
 
@@ -51,6 +101,8 @@ export function scaffoldProject(options: ScaffoldOptions): void {
     '{{ARCHITECTURE}}': architecture,
   });
 
+  const isMonorepo = architecture === 'modular-monorepo';
+
   // Write tailored .factoryrc.json
   const factoryConfig = {
     $schema: 'https://agentic-factory.dev/schema.json',
@@ -61,21 +113,33 @@ export function scaffoldProject(options: ScaffoldOptions): void {
     guards: {
       noCycles: {
         enabled: true,
-        rootDir: 'packages',
+        rootDir: isMonorepo ? 'packages' : 'src',
       },
-      boundaries: [
-        {
-          package: 'packages/types',
-          disallowImportsFrom: ['packages/testing'],
-        },
-      ],
+      boundaries: isMonorepo
+        ? [
+            {
+              package: 'packages/types',
+              disallowImportsFrom: ['packages/testing'],
+            },
+          ]
+        : [],
       plainLanguage: {
         enabled: true,
-        targetDirs: ['packages', 'src'],
+        targetDirs: isMonorepo ? ['packages', 'src'] : ['src'],
         forbiddenTerms: forbiddenJargon.length > 0 ? forbiddenJargon : ['internal_id', 'mutex_lock', 'deadlock'],
       },
       secrets: {
         enabled: true,
+      },
+      todoIssueLinks: {
+        enabled: true,
+      },
+      commentedCode: {
+        enabled: true,
+      },
+      deadExports: {
+        enabled: true,
+        rootDir: isMonorepo ? 'packages' : 'src',
       },
     },
     testing: {
@@ -85,6 +149,5 @@ export function scaffoldProject(options: ScaffoldOptions): void {
     },
   };
 
-  fs.writeFileSync(path.join(targetDir, '.factoryrc.json'), JSON.stringify(factoryConfig, null, 2), 'utf-8');
+  fs.writeFileSync(path.join(targetDir, '.factoryrc.json'), JSON.stringify(factoryConfig, null, 2) + '\n', 'utf-8');
 }
-
