@@ -9,11 +9,24 @@ import { checkCommentedCode } from './commented-code.js';
 import { checkDeadExports } from './dead-exports.js';
 import { formatGitHubAnnotation } from './github-annotations.js';
 import { initFactoryConfig } from './init.js';
+import { getAdapters } from './languages/index.js';
+import { PRESET_NAMES } from './presets.js';
+
+// Guard errors (missing optional parsers, bad config) are user-facing: print the message, not a stack.
+process.on('uncaughtException', (err) => {
+  console.error(`\nFAILED: ${err.message}\n`);
+  process.exit(1);
+});
 
 const args = process.argv.slice(2);
 const isHelp = args.includes('--help') || args.includes('-h');
 const isGitHubActions = process.env.GITHUB_ACTIONS === 'true' || args.includes('--github');
-const positionalArgs = args.filter((a) => !a.startsWith('-'));
+function flagValue(name: string): string | undefined {
+  const idx = args.indexOf(name);
+  return idx !== -1 ? args[idx + 1] : undefined;
+}
+const presetArg = flagValue('--preset');
+const positionalArgs = args.filter((a, i) => !a.startsWith('-') && args[i - 1] !== '--preset');
 const command = positionalArgs[0] || 'run';
 const projectRoot = process.cwd();
 
@@ -31,7 +44,8 @@ if (isHelp) {
   console.log(`  dead-exports    Scan and report unused/dead exports\n`);
   console.log(`Options:`);
   console.log(`  --github        Emit GitHub Actions ::error:: annotations`);
-  console.log(`  --force         Overwrite existing files when running init\n`);
+  console.log(`  --force         Overwrite existing files when running init`);
+  console.log(`  --preset <name> Extra preset for init (comma-separated). Available: ${PRESET_NAMES.join(', ')}\n`);
   process.exit(0);
 }
 
@@ -54,7 +68,14 @@ if (!VALID_COMMANDS.has(command)) {
 
 if (command === 'init') {
   const force = args.includes('--force');
-  const result = initFactoryConfig(projectRoot, { force });
+  const presets = presetArg ? presetArg.split(',').map((p) => p.trim()).filter(Boolean) : [];
+  let result;
+  try {
+    result = initFactoryConfig(projectRoot, { force, presets });
+  } catch (err) {
+    console.error(`\nFAILED: ${(err as Error).message}\n`);
+    process.exit(1);
+  }
   if (result.created) {
     console.log(`\nPASS: ${result.message}\n`);
     process.exit(0);
@@ -69,7 +90,15 @@ console.log(`Directory: ${projectRoot}`);
 console.log(`Command:   ${command}\n`);
 
 let hasAnyFailure = false;
-const config = loadFactoryConfig(projectRoot);
+let config: ReturnType<typeof loadFactoryConfig>;
+let adapters: ReturnType<typeof getAdapters>;
+try {
+  config = loadFactoryConfig(projectRoot);
+  adapters = getAdapters(config.project?.languages);
+} catch (err) {
+  console.error(`FAILED: ${(err as Error).message}\n`);
+  process.exit(1);
+}
 
 function reportError(file: string, line: number, col: number, message: string) {
   if (isGitHubActions) {
@@ -78,7 +107,7 @@ function reportError(file: string, line: number, col: number, message: string) {
 }
 
 if (command === 'run' || command === 'cycles') {
-  const result = checkNoCycles(projectRoot, config.guards?.noCycles);
+  const result = checkNoCycles(projectRoot, config.guards?.noCycles, adapters);
   if (result.hasCycles) {
     hasAnyFailure = true;
     console.error(result.summary);
@@ -94,7 +123,7 @@ if (command === 'run' || command === 'cycles') {
 }
 
 if (command === 'run' || command === 'boundaries') {
-  const result = checkBoundaries(projectRoot, config.guards?.boundaries);
+  const result = checkBoundaries(projectRoot, config.guards?.boundaries, adapters);
   if (result.hasViolations) {
     hasAnyFailure = true;
     console.error(result.summary);
@@ -109,7 +138,7 @@ if (command === 'run' || command === 'boundaries') {
 }
 
 if (command === 'run' || command === 'jargon') {
-  const result = checkPlainLanguage(projectRoot, config.guards?.plainLanguage);
+  const result = checkPlainLanguage(projectRoot, config.guards?.plainLanguage, adapters);
   if (result.hasViolations) {
     hasAnyFailure = true;
     console.error(result.summary);
@@ -139,7 +168,7 @@ if (command === 'run' || command === 'secrets') {
 }
 
 if (command === 'run' || command === 'todos') {
-  const result = checkTodoIssueLinks(projectRoot, config.guards?.todoIssueLinks);
+  const result = checkTodoIssueLinks(projectRoot, config.guards?.todoIssueLinks, adapters);
   if (result.hasViolations) {
     hasAnyFailure = true;
     console.error(result.summary);
@@ -154,7 +183,7 @@ if (command === 'run' || command === 'todos') {
 }
 
 if (command === 'run' || command === 'commented-code') {
-  const result = checkCommentedCode(projectRoot, config.guards?.commentedCode);
+  const result = checkCommentedCode(projectRoot, config.guards?.commentedCode, adapters);
   if (result.hasViolations) {
     hasAnyFailure = true;
     console.error(result.summary);
@@ -169,7 +198,7 @@ if (command === 'run' || command === 'commented-code') {
 }
 
 if (command === 'run' || command === 'dead-exports') {
-  const result = checkDeadExports(projectRoot, config.guards?.deadExports);
+  const result = checkDeadExports(projectRoot, config.guards?.deadExports, adapters);
   if (result.hasViolations) {
     hasAnyFailure = true;
     console.error(result.summary);
@@ -181,6 +210,7 @@ if (command === 'run' || command === 'dead-exports') {
   } else {
     console.log(result.summary);
   }
+  result.notes.forEach((note) => console.log(`NOTE: ${note}`));
 }
 
 console.log('');

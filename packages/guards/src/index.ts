@@ -9,3 +9,6 @@ export * from './dead-exports.js';
 export * from './github-annotations.js';
 export * from './init.js';
 
+export * from './languages/index.js';
+export * from './presets.js';
+export * from './fs-walk.js';

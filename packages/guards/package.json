@@ -1,7 +1,7 @@
 {
   "name": "@agentic-factory/guards",
   "version": "1.0.0",
-  "description": "Deterministic AST and architectural boundary guardrails for the Factory Model",
+  "description": "Deterministic, language-agnostic architectural guardrails for the Factory Model",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -16,7 +16,9 @@
     "ast-guards",
     "boundary-check",
     "linter",
-    "quality-gates"
+    "quality-gates",
+    "python",
+    "language-agnostic"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,10 +33,17 @@
     "dist",
     "schema.json"
   ],
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^22.10.1",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }
 }
-
