@@ -25,6 +25,11 @@
       "name": "GuardEnforcer",
       "description": "Runs deterministic AST boundary checks, cycle linters, and plain-language verifications",
       "systemPromptPath": "agents/guard-enforcer.md"
+    },
+    {
+      "name": "AdversarialReviewer",
+      "description": "Performs independent trajectory audits and diff reviews against BDD acceptance criteria and ADRs",
+      "systemPromptPath": "agents/adversarial-reviewer.md"
     }
   ],
   "rules": [

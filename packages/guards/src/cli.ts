@@ -4,64 +4,151 @@ import { checkNoCycles } from './no-cycles.js';
 import { checkBoundaries } from './boundary-guard.js';
 import { checkPlainLanguage } from './plain-language.js';
 import { checkSecrets } from './secret-scan.js';
+import { checkTodoIssueLinks } from './todo-issue-links.js';
+import { checkCommentedCode } from './commented-code.js';
+import { checkDeadExports } from './dead-exports.js';
+import { formatGitHubAnnotation } from './github-annotations.js';
+import { initFactoryConfig } from './init.js';
+import { getAdapters } from './languages/index.js';
+import { PRESET_NAMES } from './presets.js';
 
-const command = process.argv[2] || 'run';
+// Guard errors (missing optional parsers, bad config) are user-facing: print the message, not a stack.
+process.on('uncaughtException', (err) => {
+  console.error(`\nFAILED: ${err.message}\n`);
+  process.exit(1);
+});
+
+const args = process.argv.slice(2);
+const isHelp = args.includes('--help') || args.includes('-h');
+const isGitHubActions = process.env.GITHUB_ACTIONS === 'true' || args.includes('--github');
+function flagValue(name: string): string | undefined {
+  const idx = args.indexOf(name);
+  return idx !== -1 ? args[idx + 1] : undefined;
+}
+const presetArg = flagValue('--preset');
+const positionalArgs = args.filter((a, i) => !a.startsWith('-') && args[i - 1] !== '--preset');
+const command = positionalArgs[0] || 'run';
 const projectRoot = process.cwd();
 
-console.log(`\n🛡️  [Agentic Factory Guardrail Engine]`);
+if (isHelp) {
+  console.log(`\nUsage: agentic-guards <command> [options]\n`);
+  console.log(`Commands:`);
+  console.log(`  run             Execute all enabled guards`);
+  console.log(`  init            Auto-detect workspace structure and generate .factoryrc.json`);
+  console.log(`  cycles          Verify zero circular dependencies in code`);
+  console.log(`  boundaries      Enforce cross-package or architectural boundary rules`);
+  console.log(`  jargon          Scan user-facing strings for prohibited internal jargon`);
+  console.log(`  secrets         Scan for leaked API keys, tokens, or customer PII`);
+  console.log(`  todos           Enforce issue tracker links on all TODO/FIXME comments`);
+  console.log(`  commented-code  Detect and reject commented-out code blocks`);
+  console.log(`  dead-exports    Scan and report unused/dead exports\n`);
+  console.log(`Options:`);
+  console.log(`  --github        Emit GitHub Actions ::error:: annotations`);
+  console.log(`  --force         Overwrite existing files when running init`);
+  console.log(`  --preset <name> Extra preset for init (comma-separated). Available: ${PRESET_NAMES.join(', ')}\n`);
+  process.exit(0);
+}
+
+const VALID_COMMANDS = new Set([
+  'run',
+  'init',
+  'cycles',
+  'boundaries',
+  'jargon',
+  'secrets',
+  'todos',
+  'commented-code',
+  'dead-exports',
+]);
+
+if (!VALID_COMMANDS.has(command)) {
+  console.error(`\nFAILED: Unknown command '${command}'. Run 'agentic-guards --help' for available commands.\n`);
+  process.exit(1);
+}
+
+if (command === 'init') {
+  const force = args.includes('--force');
+  const presets = presetArg ? presetArg.split(',').map((p) => p.trim()).filter(Boolean) : [];
+  let result;
+  try {
+    result = initFactoryConfig(projectRoot, { force, presets });
+  } catch (err) {
+    console.error(`\nFAILED: ${(err as Error).message}\n`);
+    process.exit(1);
+  }
+  if (result.created) {
+    console.log(`\nPASS: ${result.message}\n`);
+    process.exit(0);
+  } else {
+    console.error(`\nWARN: ${result.message}\n`);
+    process.exit(1);
+  }
+}
+
+console.log(`\n[Agentic Factory Guardrail Engine]`);
 console.log(`Directory: ${projectRoot}`);
 console.log(`Command:   ${command}\n`);
 
 let hasAnyFailure = false;
-const config = loadFactoryConfig(projectRoot);
+let config: ReturnType<typeof loadFactoryConfig>;
+let adapters: ReturnType<typeof getAdapters>;
+try {
+  config = loadFactoryConfig(projectRoot);
+  adapters = getAdapters(config.project?.languages);
+} catch (err) {
+  console.error(`FAILED: ${(err as Error).message}\n`);
+  process.exit(1);
+}
 
-if (command === '--help' || command === '-h') {
-  console.log(`Usage: agentic-guards <command>\n`);
-  console.log(`Commands:`);
-  console.log(`  run         Execute all enabled guards (cycles, boundaries, jargon, secrets)`);
-  console.log(`  cycles      Verify zero circular dependencies in code`);
-  console.log(`  boundaries  Enforce cross-package or architectural boundary rules`);
-  console.log(`  jargon      Scan user-facing strings for prohibited internal jargon`);
-  console.log(`  secrets     Scan for leaked API keys, tokens, or customer PII\n`);
-  process.exit(0);
+function reportError(file: string, line: number, col: number, message: string) {
+  if (isGitHubActions) {
+    console.error(formatGitHubAnnotation('error', { file, line, col, message }));
+  }
 }
 
 if (command === 'run' || command === 'cycles') {
-  const result = checkNoCycles(projectRoot, config.guards?.noCycles);
+  const result = checkNoCycles(projectRoot, config.guards?.noCycles, adapters);
   if (result.hasCycles) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.cycles.forEach((c, idx) => {
       console.error(`   Cycle ${idx + 1}: ${c.join(' -> ')}`);
+      if (isGitHubActions && c[0]) {
+        reportError(c[0], 1, 1, `Circular dependency: ${c.join(' -> ')}`);
+      }
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
 }
 
 if (command === 'run' || command === 'boundaries') {
-  const result = checkBoundaries(projectRoot, config.guards?.boundaries);
+  const result = checkBoundaries(projectRoot, config.guards?.boundaries, adapters);
   if (result.hasViolations) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.violations.forEach((v) => {
-      console.error(`   ${v.file}:${v.line} forbidden import '${v.imported}' (rule: ${v.sourcePackage} cannot import ${v.forbiddenTarget})`);
+      const msg = `forbidden import '${v.imported}' (rule: ${v.sourcePackage} cannot import ${v.forbiddenTarget})`;
+      console.error(`   ${v.file}:${v.line} ${msg}`);
+      reportError(v.file, v.line, 1, msg);
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
 }
 
 if (command === 'run' || command === 'jargon') {
-  const result = checkPlainLanguage(projectRoot, config.guards?.plainLanguage);
+  const result = checkPlainLanguage(projectRoot, config.guards?.plainLanguage, adapters);
   if (result.hasViolations) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.violations.forEach((v) => {
-      console.error(`   ${v.file}:${v.line} prohibited term '${v.term}' in "${v.snippet}"`);
+      const msg = `prohibited term '${v.term}' in "${v.snippet}"`;
+      console.error(`   ${v.file}:${v.line} ${msg}`);
+      reportError(v.file, v.line, 1, msg);
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
 }
 
@@ -69,21 +156,68 @@ if (command === 'run' || command === 'secrets') {
   const result = checkSecrets(projectRoot, config.guards?.secrets);
   if (result.hasViolations) {
     hasAnyFailure = true;
-    console.error(`❌ ${result.summary}`);
+    console.error(result.summary);
     result.violations.forEach((v) => {
-      console.error(`   ${v.file}:${v.line} potential secret match (${v.pattern})`);
+      const msg = `potential secret match (${v.pattern})`;
+      console.error(`   ${v.file}:${v.line} ${msg}`);
+      reportError(v.file, v.line, 1, msg);
     });
   } else {
-    console.log(`✅ ${result.summary}`);
+    console.log(result.summary);
   }
+}
+
+if (command === 'run' || command === 'todos') {
+  const result = checkTodoIssueLinks(projectRoot, config.guards?.todoIssueLinks, adapters);
+  if (result.hasViolations) {
+    hasAnyFailure = true;
+    console.error(result.summary);
+    result.violations.forEach((v) => {
+      const msg = `TODO/FIXME missing issue tracker link: "${v.text}"`;
+      console.error(`   ${v.file}:${v.line}:${v.col} ${msg}`);
+      reportError(v.file, v.line, v.col, msg);
+    });
+  } else {
+    console.log(result.summary);
+  }
+}
+
+if (command === 'run' || command === 'commented-code') {
+  const result = checkCommentedCode(projectRoot, config.guards?.commentedCode, adapters);
+  if (result.hasViolations) {
+    hasAnyFailure = true;
+    console.error(result.summary);
+    result.violations.forEach((v) => {
+      const msg = `Commented-out code detected: "${v.snippet}"`;
+      console.error(`   ${v.file}:${v.line}:${v.col} ${msg}`);
+      reportError(v.file, v.line, v.col, msg);
+    });
+  } else {
+    console.log(result.summary);
+  }
+}
+
+if (command === 'run' || command === 'dead-exports') {
+  const result = checkDeadExports(projectRoot, config.guards?.deadExports, adapters);
+  if (result.hasViolations) {
+    hasAnyFailure = true;
+    console.error(result.summary);
+    result.violations.forEach((v) => {
+      const msg = `Unused/dead export '${v.symbol}'`;
+      console.error(`   ${v.file}:${v.line}:${v.col} ${msg}`);
+      reportError(v.file, v.line, v.col, msg);
+    });
+  } else {
+    console.log(result.summary);
+  }
+  result.notes.forEach((note) => console.log(`NOTE: ${note}`));
 }
 
 console.log('');
 if (hasAnyFailure) {
-  console.error(`🚫 Factory Quality Gates FAILED. Review violations above.\n`);
+  console.error(`FAILED: Quality gates failed. Review violations above.\n`);
   process.exit(1);
 } else {
-  console.log(`🎉 All Factory Quality Gates PASSED with 0 violations.\n`);
+  console.log(`SUCCESS: All quality gates passed with 0 violations.\n`);
   process.exit(0);
 }
-

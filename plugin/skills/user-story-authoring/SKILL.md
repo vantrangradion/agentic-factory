@@ -19,9 +19,9 @@ A production-grade user story catalog must bridge high-level product specificati
 
 2. **Persona Grounding:**
    Every story must be authored from the perspective of an authentic project persona:
-   - **Charlotte (Primary Persona — Non-Technical Sales Rep):** Focuses on friction-free onboarding, zero technical jargon, background performance preservation (<2% CPU, <250 MB RAM), and peace-of-mind privacy controls.
-   - **Marcus (Secondary Persona — Operations Lead & Technical Power User):** Focuses on multi-destination pipeline integrity (Google Sheets, SQLite, webhooks, MCP), schema stability, and fault isolation between sinks.
-   - **Dylan (Internal Persona — Software Engineer / Intern):** Focuses on strict Test-Driven Development (TDD), CLI feature parity with `--json` outputs, and deterministic testing harnesses (fake fixtures, local mock servers).
+   - **Charlotte (Primary Persona: Non-Technical Sales Rep):** Focuses on friction-free onboarding, zero technical jargon, background performance preservation (<2% CPU, <250 MB RAM), and peace-of-mind privacy controls.
+   - **Marcus (Secondary Persona: Operations Lead & Technical Power User):** Focuses on multi-destination pipeline integrity (Google Sheets, SQLite, webhooks, MCP), schema stability, and fault isolation between sinks.
+   - **Dylan (Internal Persona: Software Engineer / Intern):** Focuses on strict Test-Driven Development (TDD), CLI feature parity with `--json` outputs, and deterministic testing harnesses (fake fixtures, local mock servers).
 
 ---
 
@@ -57,7 +57,7 @@ Maintain a clean, non-competing two-tier structure in `docs/user-stories.md`:
 
 ### Table Standards:
 1. **Tier 1 (Epic Architecture):** Columns: `Epic`, `Features`, `Scope`, `Target Sprint`, `Milestone & Core Deliverable`.
-2. **Tier 2 (Sprint Execution Backlog):** Columns: `User Story ID`, `Epic`, `Feature`, `Title`, `Priority`, `Immediate Dependencies`. Grouped under markdown headers by sprint (`#### Sprint 1 — ...`).
+2. **Tier 2 (Sprint Execution Backlog):** Columns: `User Story ID`, `Epic`, `Feature`, `Title`, `Priority`, `Immediate Dependencies`. Grouped under markdown headers by sprint (`#### Sprint 1: ...`).
 
 ---
 

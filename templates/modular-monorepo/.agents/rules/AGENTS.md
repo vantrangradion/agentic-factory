@@ -1,4 +1,4 @@
-# Factory Model — Agent Guidelines & Project Rules
+# Factory Model: Agent Guidelines & Project Rules
 
 This document defines the development rules, architectural contracts, and context hygiene standards for this project.
 
@@ -36,7 +36,17 @@ To keep the agent's context window lean and fast:
   - Zero dead code or unused exports.
   - No commented-out code.
   - No `TODO` comments without an associated issue tracker link.
+  - Zero icons, emojis, or em dashes in CLI output, UI text, code comments, documentation, and agent communication.
 * **User-Facing Plain Language (UX Guard):**
   - Never expose internal system jargon or database errors to end users.
   - Plain language guard will fail the build if prohibited terms appear in user-facing surfaces.
+* **Automated PR & Review Workflow:**
+  - When assigned a task or user story, the agent executes the complete 6-step lifecycle autonomously (Red -> Green -> Guard -> Adversarial Audit).
+  - Creates a dedicated feature branch, pushes to the remote, and opens a Pull Request via GitHub CLI (`gh pr create`).
+  - PR descriptions must include full Red-to-Green test logs, guard passes, and adversarial audit summaries for developer sign-off.
+* **Story Batching and Milestone Execution:**
+  - When assigned a multi-story batch or sprint milestone, execute stories sequentially in topological dependency order.
+  - Never bundle multiple stories into a single monolithic PR; each story must deliver an isolated feature branch and dedicated PR.
+  - If a story hits a non-automatable human gate (such as physical device login or QR code scanning), pause and notify the developer.
+  - Recommend `/compact` between major milestones to maintain conversation hygiene.
 

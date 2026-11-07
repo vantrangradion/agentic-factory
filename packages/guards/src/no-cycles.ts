@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import ts from 'typescript';
 import { NoCyclesConfig } from './config.js';
+import { collectSourceFiles } from './fs-walk.js';
+import { adapterForFile, getAdapters, LanguageAdapter } from './languages/index.js';
 
 export interface CycleResult {
   hasCycles: boolean;
@@ -9,86 +10,32 @@ export interface CycleResult {
   summary: string;
 }
 
-function resolveImportPath(containingFile: string, moduleSpecifier: string): string | null {
-  if (!moduleSpecifier.startsWith('.')) {
-    return null; // External package
-  }
-  const containingDir = path.dirname(containingFile);
-  const candidate = path.resolve(containingDir, moduleSpecifier);
-
-  const extensions = ['.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js'];
-  if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-    return candidate;
-  }
-  for (const ext of extensions) {
-    const full = candidate + ext;
-    if (fs.existsSync(full) && fs.statSync(full).isFile()) {
-      return full;
-    }
-  }
-  return null;
-}
-
-function extractImports(filePath: string): string[] {
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
-  const imports: string[] = [];
-
-  function visit(node: ts.Node) {
-    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
-      if (node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-        imports.push(node.moduleSpecifier.text);
-      }
-    } else if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length === 1 &&
-      ts.isStringLiteral(node.arguments[0]!)
-    ) {
-      imports.push(node.arguments[0]!.text);
-    }
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-  return imports;
-}
-
-function collectSourceFiles(dir: string, exclude: string[] = []): string[] {
-  const results: string[] = [];
-  if (!fs.existsSync(dir)) return results;
-
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (exclude.some((ex) => fullPath.includes(ex))) continue;
-
-    if (entry.isDirectory()) {
-      if (['node_modules', 'dist', '.git'].includes(entry.name)) continue;
-      results.push(...collectSourceFiles(fullPath, exclude));
-    } else if (/\.(ts|tsx|js|jsx)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) {
-      results.push(fullPath);
-    }
-  }
-  return results;
-}
-
-export function checkNoCycles(projectRoot: string, config?: NoCyclesConfig): CycleResult {
+export function checkNoCycles(
+  projectRoot: string,
+  config?: NoCyclesConfig,
+  adapters: LanguageAdapter[] = getAdapters()
+): CycleResult {
   if (config?.enabled === false) {
-    return { hasCycles: false, cycles: [], summary: 'Cycle guard disabled in config' };
+    return { hasCycles: false, cycles: [], summary: 'PASS: Cycle guard disabled in config' };
   }
 
   const rootDir = path.resolve(projectRoot, config?.rootDir || '.');
   const exclude = config?.exclude || ['node_modules', 'dist'];
-  const files = collectSourceFiles(rootDir, exclude);
+  const files = collectSourceFiles(rootDir, {
+    include: (name) => adapters.some((a) => a.isSourceFile(name)),
+    exclude,
+  });
+  const fileSet = new Set(files);
+  const roots = [rootDir, path.resolve(projectRoot)];
 
   const graph = new Map<string, string[]>();
   for (const file of files) {
-    const imports = extractImports(file);
+    const adapter = adapterForFile(adapters, file)!;
+    const content = fs.readFileSync(file, 'utf-8');
     const resolvedDeps: string[] = [];
-    for (const imp of imports) {
-      const resolved = resolveImportPath(file, imp);
-      if (resolved && files.includes(resolved)) {
+    for (const imp of adapter.extractImports(file, content)) {
+      const resolved = adapter.resolveImport(file, imp.spec, roots);
+      if (resolved && fileSet.has(resolved)) {
         resolvedDeps.push(resolved);
       }
     }
@@ -133,4 +80,3 @@ export function checkNoCycles(projectRoot: string, config?: NoCyclesConfig): Cyc
 
   return { hasCycles, cycles: detectedCycles, summary };
 }
-

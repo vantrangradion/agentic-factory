@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import ts from 'typescript';
 import { BoundaryRule } from './config.js';
+import { collectSourceFiles } from './fs-walk.js';
+import { adapterForFile, getAdapters, LanguageAdapter } from './languages/index.js';
 
 export interface BoundaryViolation {
   file: string;
@@ -17,24 +18,11 @@ export interface BoundaryResult {
   summary: string;
 }
 
-function collectSourceFiles(dir: string): string[] {
-  const results: string[] = [];
-  if (!fs.existsSync(dir)) return results;
-
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (['node_modules', 'dist', '.git'].includes(entry.name)) continue;
-      results.push(...collectSourceFiles(fullPath));
-    } else if (/\.(ts|tsx|js|jsx)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) {
-      results.push(fullPath);
-    }
-  }
-  return results;
-}
-
-export function checkBoundaries(projectRoot: string, rules: BoundaryRule[] = []): BoundaryResult {
+export function checkBoundaries(
+  projectRoot: string,
+  rules: BoundaryRule[] = [],
+  adapters: LanguageAdapter[] = getAdapters()
+): BoundaryResult {
   if (!rules || rules.length === 0) {
     return { hasViolations: false, violations: [], summary: 'PASS: No boundary rules configured' };
   }
@@ -45,47 +33,37 @@ export function checkBoundaries(projectRoot: string, rules: BoundaryRule[] = [])
     const pkgDir = path.resolve(projectRoot, rule.package);
     if (!fs.existsSync(pkgDir)) continue;
 
-    const files = collectSourceFiles(pkgDir);
+    const files = collectSourceFiles(pkgDir, {
+      include: (name) => adapters.some((a) => a.isSourceFile(name)),
+    });
 
     for (const file of files) {
+      const adapter = adapterForFile(adapters, file)!;
       const content = fs.readFileSync(file, 'utf-8');
-      const sourceFile = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true);
 
-      function visit(node: ts.Node) {
-        let importTarget: string | null = null;
-        if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
-          if (node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-            importTarget = node.moduleSpecifier.text;
+      for (const imp of adapter.extractImports(file, content)) {
+        if (imp.dynamic) continue;
+        const pathLike = adapter.toPathLike(imp.spec);
+
+        for (const forbidden of rule.disallowImportsFrom) {
+          // Check direct import path matches or relative paths traversing into forbidden package
+          const resolvedCandidate = pathLike.startsWith('.') ? path.resolve(path.dirname(file), pathLike) : null;
+          const forbiddenAbs = path.resolve(projectRoot, forbidden);
+
+          const isDirectMatch = pathLike.includes(forbidden);
+          const isPathMatch = resolvedCandidate && resolvedCandidate.startsWith(forbiddenAbs);
+
+          if (isDirectMatch || isPathMatch) {
+            violations.push({
+              file: path.relative(projectRoot, file),
+              imported: imp.spec,
+              sourcePackage: rule.package,
+              forbiddenTarget: forbidden,
+              line: imp.line,
+            });
           }
         }
-
-        if (importTarget) {
-          for (const forbidden of rule.disallowImportsFrom) {
-            // Check direct import path matches or relative paths traversing into forbidden package
-            const resolvedCandidate = importTarget.startsWith('.')
-              ? path.resolve(path.dirname(file), importTarget)
-              : null;
-            const forbiddenAbs = path.resolve(projectRoot, forbidden);
-
-            const isDirectMatch = importTarget.includes(forbidden);
-            const isPathMatch = resolvedCandidate && resolvedCandidate.startsWith(forbiddenAbs);
-
-            if (isDirectMatch || isPathMatch) {
-              const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-              violations.push({
-                file: path.relative(projectRoot, file),
-                imported: importTarget,
-                sourcePackage: rule.package,
-                forbiddenTarget: forbidden,
-                line: line + 1,
-              });
-            }
-          }
-        }
-        ts.forEachChild(node, visit);
       }
-
-      visit(sourceFile);
     }
   }
 
@@ -96,4 +74,3 @@ export function checkBoundaries(projectRoot: string, rules: BoundaryRule[] = [])
 
   return { hasViolations, violations, summary };
 }
-
