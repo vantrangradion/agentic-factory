@@ -40,28 +40,31 @@ flowchart TD
 
 ---
 
-## Operational Runbook: The 6-Step Story Lifecycle
+## Operational Runbook: The 7-Step Story Lifecycle
 
 When picking up a user story from `docs/user-stories.md`:
 
 ```mermaid
 flowchart TD
-    Dev["Developer (Orchestrator)"] -->|1. Triggers Story| Step1["1. Context & Implementation Plan"]
-    Step1 --> Step2["2. Red Phase (Vitest First)"]
-    Step2 --> Step3["3. Green Phase (Self-Healing Code)"]
-    Step3 --> Step4["4. Guard Phase (pnpm guard)"]
-    Step4 --> Step5["5. Adversarial Audit (Decoupled Review)"]
-    Step5 --> Step6["6. Done (Backlog Checkbox & Sign-Off)"]
-    Step6 --> DevSignOff["Developer: Approve Commit"]
+    Dev["Developer (Orchestrator)"] -->|Assigns Story| Step1["1. Accept (Definition of Ready)"]
+    Step1 --> Step2["2. Plan in Draft PR"]
+    Step2 --> Step3["3. Red Phase (Test First)"]
+    Step3 --> Step4["4. Green Phase (Self-Healing Code)"]
+    Step4 --> Step5["5. Guard Phase (pnpm guard)"]
+    Step5 --> Step6["6. Adversarial Audit (Decoupled Review)"]
+    Step6 --> Step7["7. Ready for Review"]
+    Step7 --> DevSignOff["Developer: Review and Merge"]
+    Step2 -.->|Async plan review| DevPlan["Developer: Request Changes on Plan"]
 ```
 
-### The 6 Steps:
-1. **Context & Plan:** Load BDD criteria, ADRs, and outline affected files, interfaces, and test scenarios.
-2. **Red Phase (Test First):** Write Vitest tests with synthetic doubles; verify failure (`Red`).
-3. **Green Phase & Feedback Loop:** Write minimal production code; autonomously diagnose and patch test failures until passing (`Green`).
-4. **Deterministic Guardrails:** Execute `pnpm guard` to enforce zero circular dependencies, boundary isolation, and secret scanning.
-5. **Adversarial Audit:** The decoupled `AdversarialReviewer` audits the diff against BDD acceptance criteria, ADR compliance, and edge-case failure paths.
-6. **Definition of Done & Sign-Off:** Update backlog checklist, present clean diff and audit report for developer review and commit.
+### The 7 Steps:
+1. **Accept (Definition of Ready):** Load BDD criteria, ADRs, and boundary rules. Confirm every criterion is testable, dependencies are merged or are the base branch, and no human gate remains. Otherwise report what is missing and do not start.
+2. **Plan in a Draft PR:** Push a plan commit and open a draft PR whose body starts with `## Plan` (affected files, interfaces, test scenarios, edge cases, risks). Continue without waiting.
+3. **Red Phase (Test First):** Write tests with synthetic doubles; verify failure (`Red`).
+4. **Green Phase & Feedback Loop:** Write minimal production code; autonomously diagnose and patch test failures until passing (`Green`).
+5. **Deterministic Guardrails:** Execute `pnpm guard` to enforce zero circular dependencies, boundary isolation, and secret scanning.
+6. **Adversarial Audit:** The decoupled `AdversarialReviewer` audits the diff against BDD acceptance criteria, ADR compliance, the plan, and edge-case failure paths.
+7. **Ready for Review:** Add test logs, guard results, the audit report, and `## Deviations from Plan` to the PR, then mark it ready. The backlog checkbox is ticked only after merge.
 
 ---
 
@@ -70,11 +73,12 @@ flowchart TD
 | Lifecycle Phase | Autonomous (Agent & Harness) | Human Control (Developer) |
 | :--- | :--- | :--- |
 | **Story Selection** | None | Selects target story from backlog based on priority |
-| **Context & Plan** | Formulates implementation plan and maps interfaces | Reviews plan for high-complexity architectural stories |
+| **Accept** | Checks the Definition of Ready and reports gaps | Assigns stories and resolves open questions |
+| **Plan (Draft PR)** | Publishes the plan in a draft PR and continues | Requests changes on the draft if the plan is wrong |
 | **Test Authoring (Red)** | Generates Vitest assertions from Gherkin specifications | Reviews test strategy if architecture changes |
 | **Implementation (Green)**| Writes minimal production code | Steers trade-offs if multiple paths exist |
 | **Self-Healing** | Parses error traces, diagnoses bugs, and iterates code | Steps in only if an external spec flaw is discovered |
 | **Quality Gates** | Runs AST linters, cycle detectors, and boundary guards | Configures project tolerances in .factoryrc.json |
 | **Adversarial Audit** | Evaluates diff against edge cases and acceptance criteria | Validates audit findings and assesses business risk |
-| **Final Sign-Off** | Marks backlog checklist done, formats clean diff summary | Reviews code changes, approves, and commits |
+| **Final Sign-Off** | Marks the PR ready with logs, audit, and plan deviations | Reviews, approves, and merges; backlog is ticked after merge |
 

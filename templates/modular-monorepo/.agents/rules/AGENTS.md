@@ -41,9 +41,9 @@ To keep the agent's context window lean and fast:
   - Never expose internal system jargon or database errors to end users.
   - Plain language guard will fail the build if prohibited terms appear in user-facing surfaces.
 * **Automated PR & Review Workflow:**
-  - When assigned a task or user story, the agent executes the complete 6-step lifecycle autonomously (Red -> Green -> Guard -> Adversarial Audit).
-  - Creates a dedicated feature branch, pushes to the remote, and opens a Pull Request via GitHub CLI (`gh pr create`).
-  - PR descriptions must include full Red-to-Green test logs, guard passes, and adversarial audit summaries for developer sign-off.
+  - When assigned a task or user story, the agent executes the complete 7-step lifecycle autonomously (Accept -> Plan -> Red -> Green -> Guard -> Adversarial Audit -> Ready for Review).
+  - Publishes the plan in a draft PR (`gh pr create --draft`) before writing code, then continues without waiting.
+  - Before marking the PR ready (`gh pr ready`), the PR description must include Red-to-Green test logs, guard passes, the adversarial audit summary, and deviations from the plan.
 * **Story Batching and Milestone Execution:**
   - When assigned a multi-story batch or sprint milestone, execute stories sequentially in topological dependency order.
   - Never bundle multiple stories into a single monolithic PR; each story must deliver an isolated feature branch and dedicated PR.
