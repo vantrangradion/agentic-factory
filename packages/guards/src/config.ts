@@ -49,6 +49,101 @@ export interface DeadExportsConfig {
   exclude?: string[];
 }
 
+/** One step of the agent loop's gate ladder, run in order, cheapest first. */
+export interface AgentGate {
+  name: string;
+  /** Shell command run from the project root. */
+  run: string;
+  timeoutMs?: number;
+}
+
+export interface AgentBudgetConfig {
+  /** Weekly spend cap in USD. Omit for no cap. */
+  weeklyUsd?: number;
+  /** Fraction of the cap after which only issues with a bug label run. Default 0.8. */
+  bugOnlyAt?: number;
+  /** Fraction of the cap after which the loop stops until the next week. Default 1.0. */
+  stopAt?: number;
+  bugLabels?: string[];
+  /** Offset used to find the start of the week (Monday 00:00), e.g. "+07:00". Default "+00:00". */
+  utcOffset?: string;
+  /**
+   * USD per million tokens: one price for every model, or a map from model id
+   * to price. Without it, cost is reported as unknown and the cap cannot apply.
+   */
+  pricing?: ModelPricing | Record<string, ModelPricing>;
+}
+
+export interface ModelPricing {
+  inputPerMTok: number;
+  outputPerMTok: number;
+  cachedInputPerMTok?: number;
+}
+
+/** Sends issues with any of `labels` to `model`. Routes are checked in order; the first match wins. */
+export interface AgentRoute {
+  labels: string[];
+  model: string;
+}
+
+export interface AgentConfig {
+  /** Agent backend. Only "antigravity-cli" (`agy`) is implemented; the field leaves room for other vendors. */
+  runner?: 'antigravity-cli';
+  /** Default model for every issue that no route matches. Required. */
+  model?: string;
+  /** Fixed label-based routing to other models of the same vendor. Never chosen by the agent. */
+  routes?: AgentRoute[];
+  labels?: {
+    ready?: string;
+    working?: string;
+    prOpen?: string;
+    needsHuman?: string;
+    planReview?: string;
+    planApproved?: string;
+  };
+  plan?: {
+    /**
+     * "required" (default): after the red phase the run stops with a draft PR
+     * holding the plan and the failing tests; nothing is implemented until a
+     * person adds the plan-approved label. "none": red and green run in one go.
+     */
+    approval?: 'required' | 'none';
+  };
+  /** Independent review of finished work by a separate agent session. Advisory: it never blocks a merge. */
+  review?: {
+    /** "labelled" (default): only issues with one of `labels`. */
+    when?: 'never' | 'labelled' | 'always';
+    labels?: string[];
+    /** Model for the reviewer. Default: the issue's model. */
+    model?: string;
+    /** Fix rounds the coding agent gets for review findings. 0 or 1; default 1. */
+    maxFixRounds?: number;
+  };
+  /** Files the agent must read before it changes anything. Missing files are skipped with a warning. */
+  context?: string[];
+  gates?: AgentGate[];
+  tdd?: {
+    /** Run a tests-only red phase before the implementation. Default true. */
+    enabled?: boolean;
+    /** Gate that must fail after the red phase. Default "test". */
+    redGate?: string;
+    /** Globs that identify test files. */
+    testFiles?: string[];
+  };
+  /** Globs the agent may never change. The loop reverts any change to them. */
+  protectedPaths?: string[];
+  /** Attempts per phase before the issue goes to a human. Default 3. */
+  maxAttempts?: number;
+  /** Wall-clock limit for one agent session. Default 30 minutes. */
+  sessionTimeoutMs?: number;
+  branchPrefix?: string;
+  /** Command that installs dependencies in a fresh clone before a local run, e.g. "pnpm install --frozen-lockfile". */
+  setup?: string;
+  /** Orphan branch holding one JSON record per run. Default "factory-ledger". */
+  ledgerBranch?: string;
+  budget?: AgentBudgetConfig;
+}
+
 export interface FactoryConfig {
   $schema?: string;
   /** Built-in preset names (e.g. 'agentic-factory/recommended') or relative paths to shared JSON configs. */
@@ -73,6 +168,8 @@ export interface FactoryConfig {
     maxSuiteDurationMs?: number;
     requireSyntheticScenarios?: boolean;
   };
+  /** Settings for the autonomous agent loop (`@agentic-factory/loop`). */
+  agent?: AgentConfig;
 }
 
 export function loadFactoryConfig(startDir: string = process.cwd()): FactoryConfig {

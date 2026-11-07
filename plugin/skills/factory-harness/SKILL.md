@@ -50,28 +50,28 @@ All packages must compile with zero warnings, all guards pass, and test suite co
 
 ## 2. Operational Story Execution Runbook
 
-Once the factory floor is verified, execute user stories using the **7-Step Story Lifecycle**. It has two human checkpoints, both asynchronous so milestone batches keep moving: the plan is reviewed in a draft PR before code lands, and the finished PR is reviewed before merge.
+Once the factory floor is verified, execute user stories using the **7-Step Story Lifecycle**. It has two human checkpoints: the plan and its failing tests are approved before any implementation starts (blocking), and the finished PR is reviewed before merge. The `@agentic-factory/loop` package (`agentic-loop run-issue` or `watch`) runs this lifecycle and enforces it in code.
 
 1. **Accept (Definition of Ready):**
    - Developer assigns the story (or a milestone batch).
    - Agent loads the BDD scenarios, ADRs, and boundary rules, then confirms the story is ready: every acceptance criterion is testable, every dependency story is merged or is the branch this one builds on, and no open questions or non-automatable human gates remain.
    - If any check fails, do not start. Report exactly what is missing and move to the next ready story in the batch.
-2. **Plan in a Draft PR:**
-   - Create the story branch, push a plan commit (`git commit --allow-empty -m "plan(<story-id>): <title>"`), and open a draft PR (`gh pr create --draft`).
-   - The PR body starts with a `## Plan` section: affected files, interfaces, synthetic test scenarios, edge cases, and risks.
-   - Continue immediately; do not wait for approval. A reviewer rejects the plan by requesting changes on the draft PR.
-3. **Red Phase (Test First):**
-   - Agent authors unit or contract tests matching Gherkin acceptance criteria.
-   - Runs tests and confirms expected failure (`Red`) using synthetic data.
+2. **Red Phase (Test First):**
+   - Agent authors unit or contract tests matching Gherkin acceptance criteria, changing test files only.
+   - Runs tests and confirms expected failure (`Red`) using synthetic data, then commits them.
+3. **Plan Approval (blocking):**
+   - Push the red commit and open a draft PR (`gh pr create --draft`) whose body starts with a `## Plan` section: approach, files to change, interfaces, edge cases covered by the tests, and risks or open questions.
+   - Stop. Nothing is implemented until a person approves (the `agent:plan-approved` label). To reject, a reviewer comments or requests changes on the draft and re-labels the story `agent:ready`; the next red phase receives those comments.
 4. **Green Phase & Autonomous Feedback Loop:**
-   - Agent implements minimal production code.
-   - If tests or compiler fail, agent autonomously diagnoses error traces and iterates to `Green`.
+   - Agent implements minimal production code on the approved branch. The approved tests are locked: any edit to them is reverted.
+   - If tests or compiler fail, the gate output goes back to the agent, which iterates to `Green` within the attempt limit.
 5. **Deterministic Guard Verification:**
-   - Agent runs the project's guards (`pnpm guard` or the configured equivalent) to enforce cycle limits, package boundaries, UX language rules, and secret scanning.
-6. **Adversarial Audit & Trajectory Review:**
-   - The decoupled `AdversarialReviewer` agent audits the diff against the acceptance criteria, ADR compliance, the `## Plan` in the PR, and the 20% edge cases (unhandled errors, rate limits, resource cleanup).
+   - The project's gates run cheapest first (`pnpm guard` or the configured equivalent): cycle limits, package boundaries, UX language rules, secret scanning, then tests.
+6. **Independent Review (by exception):**
+   - Only for stories labelled risky (configurable). A separate reviewer session (the `AdversarialReviewer` role) checks the diff against the issue, treating the coding agent's summary as claims to verify. Findings are classified as gap, bug, verification-miss, or scope-drift.
+   - Advisory only: it never blocks a merge. High and medium findings get one fix round, kept only if every gate still passes, and not reviewed again.
 7. **Ready for Review & Human Sign-Off:**
-   - Agent appends Red/Green logs, guard results, the audit report, and a `## Deviations from Plan` section (or "None") to the PR body, then marks it ready (`gh pr ready`).
+   - Agent appends Red/Green logs, guard results, any review findings, and a `## Deviations from Plan` section (or "None") to the PR body, then marks it ready (`gh pr ready`).
    - Agent marks the story done in the backlog only after the developer merges.
 
-**If a plan is rejected after work has moved on:** revise the plan in the PR body, restart that story from step 3, then rebase every dependent story branch onto the revised one and re-run its tests and guards. The `milestone-watchdog` skill detects this state.
+**If a plan is rejected:** re-plan from step 2 with the reviewers' comments, then rebase every dependent story branch onto the revised one and re-run its tests and guards. The `milestone-watchdog` skill detects this state.

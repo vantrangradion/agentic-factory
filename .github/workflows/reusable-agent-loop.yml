@@ -1,0 +1,324 @@
+name: Agentic Loop
+
+# Issue in, test-first pull request out. All decisions (budget, phases,
+# retries, protected paths, PR body) are made by the tested `agentic-loop`
+# CLI from the consumer's .factoryrc.json. This file only wires it to GitHub.
+#
+# The agent session never receives a GitHub token: the checkout does not
+# persist credentials, and tokens are passed only to the steps that push.
+# The agentic-loop CLI also removes the runner's file-command and OIDC
+# variables from the agent's environment, and later git steps ignore hooks.
+#
+# EXPERIMENTAL, not yet run. The agent runs with every permission approved,
+# on the same runner as the steps that hold the push token. A determined
+# agent could still find the runner's file-command folder under RUNNER_TEMP
+# and affect later steps. Run the agent in a container (or a separate job
+# that hands over a git bundle) before relying on this workflow.
+
+on:
+  workflow_call:
+    inputs:
+      issue-number:
+        description: Issue to work on.
+        required: true
+        type: number
+      agy-install-command:
+        description: >-
+          Installs Antigravity CLI (agy) on the runner and puts it on PATH, pinned to one version
+          so runs stay comparable. See https://antigravity.google/docs/install?tab=cli
+        required: true
+        type: string
+      node-version:
+        required: false
+        type: string
+        default: '22'
+      use-pnpm:
+        description: Set up pnpm from the packageManager field before installing.
+        required: false
+        type: boolean
+        default: true
+      setup-command:
+        description: Installs the project's dependencies, including @agentic-factory/loop.
+        required: false
+        type: string
+        default: pnpm install --frozen-lockfile
+      loop-command:
+        description: How to call the agentic-loop CLI.
+        required: false
+        type: string
+        default: pnpm exec agentic-loop
+      base-branch:
+        description: Branch the pull request targets. Defaults to the repository's default branch.
+        required: false
+        type: string
+        default: ''
+      ledger-branch:
+        description: Orphan branch that stores one JSON record per run.
+        required: false
+        type: string
+        default: factory-ledger
+      timeout-minutes:
+        required: false
+        type: number
+        default: 90
+      use-adc:
+        description: Sign agy in with Application Default Credentials through Workload Identity Federation, instead of an API key.
+        required: false
+        type: boolean
+        default: false
+      gcp-project-id:
+        description: Google Cloud project billed for ADC usage (GOOGLE_CLOUD_QUOTA_PROJECT).
+        required: false
+        type: string
+        default: ''
+      gcp-location:
+        required: false
+        type: string
+        default: us-central1
+      gcp-workload-identity-provider:
+        required: false
+        type: string
+        default: ''
+      gcp-service-account:
+        required: false
+        type: string
+        default: ''
+    secrets:
+      gemini-api-key:
+        description: Gemini API key for agy. Not needed with use-adc.
+        required: false
+      github-token:
+        description: >-
+          Token with contents, issues and pull-requests write access, used to push and open the PR.
+          Use a GitHub App token or fine-grained PAT: pull requests opened with the default
+          GITHUB_TOKEN do not trigger the repository's CI.
+        required: false
+
+jobs:
+  loop:
+    name: Agent loop for issue ${{ inputs.issue-number }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    concurrency:
+      group: agentic-loop-${{ github.repository }}-${{ inputs.issue-number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    env:
+      ISSUE: ${{ inputs.issue-number }}
+      GH_REPO: ${{ github.repository }}
+      LEDGER_BRANCH: ${{ inputs.ledger-branch }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare
+        run: |
+          echo "LOOP_DIR=$RUNNER_TEMP/agentic-loop" >> "$GITHUB_ENV"
+          echo "LEDGER_DIR=$RUNNER_TEMP/agentic-ledger" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/agentic-loop"
+          git config user.name "agentic-loop[bot]"
+          git config user.email "agentic-loop@users.noreply.github.com"
+          # Credentials written by google-github-actions/auth must never be committed.
+          echo 'gha-creds-*.json' >> .git/info/exclude
+
+      - name: Set up pnpm
+        if: inputs.use-pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Install dependencies
+        run: ${{ inputs.setup-command }}
+
+      - name: Check agent config
+        id: config
+        run: ${{ inputs.loop-command }} check-config
+
+      - name: Read the issue
+        id: issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue view "$ISSUE" --json number,title,body,labels,url > "$LOOP_DIR/issue.json"
+          echo "labels=$(jq -r '[.labels[].name] | join(",")' "$LOOP_DIR/issue.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the run ledger
+        env:
+          TOKEN: ${{ secrets.github-token || github.token }}
+        run: |
+          auth_url="https://x-access-token:${TOKEN}@github.com/${GH_REPO}.git"
+          if git ls-remote --exit-code --heads "$auth_url" "$LEDGER_BRANCH" > /dev/null; then
+            git clone --quiet --branch "$LEDGER_BRANCH" --single-branch "$auth_url" "$LEDGER_DIR"
+          else
+            git init --quiet -b "$LEDGER_BRANCH" "$LEDGER_DIR"
+            git -C "$LEDGER_DIR" remote add origin "$auth_url"
+          fi
+          # Drop the token from disk before the agent runs.
+          git -C "$LEDGER_DIR" remote set-url origin "https://github.com/${GH_REPO}.git"
+          git -C "$LEDGER_DIR" config user.name "agentic-loop[bot]"
+          git -C "$LEDGER_DIR" config user.email "agentic-loop@users.noreply.github.com"
+          mkdir -p "$LEDGER_DIR/runs"
+
+      - name: Check the budget
+        id: budget
+        env:
+          LABELS: ${{ steps.issue.outputs.labels }}
+        run: ${{ inputs.loop-command }} budget --ledger "$LEDGER_DIR/runs" --labels "$LABELS"
+
+      - name: Stop when over budget
+        if: steps.budget.outputs.allowed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REASON: ${{ steps.budget.outputs.reason }}
+          READY: ${{ steps.config.outputs.ready-label }}
+        run: |
+          gh issue comment "$ISSUE" --body "The agent loop did not start. $REASON Add the \`$READY\` label again to retry."
+          gh issue edit "$ISSUE" --remove-label "$READY" || true
+
+      - name: Mark the issue as in progress
+        if: steps.budget.outputs.allowed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          READY: ${{ steps.config.outputs.ready-label }}
+          WORKING: ${{ steps.config.outputs.working-label }}
+          PR_OPEN: ${{ steps.config.outputs.pr-open-label }}
+          NEEDS_HUMAN: ${{ steps.config.outputs.needs-human-label }}
+        run: |
+          gh label create "$READY" --color 0E8A16 --description "Ready for the agent loop" 2> /dev/null || true
+          gh label create "$WORKING" --color FBCA04 --description "The agent loop is working on this" 2> /dev/null || true
+          gh label create "$PR_OPEN" --color 1D76DB --description "The agent loop opened a pull request" 2> /dev/null || true
+          gh label create "$NEEDS_HUMAN" --color D93F0B --description "The agent loop stopped and needs a person" 2> /dev/null || true
+          gh issue edit "$ISSUE" --remove-label "$READY" --remove-label "$PR_OPEN" --remove-label "$NEEDS_HUMAN" --add-label "$WORKING"
+
+      - name: Install Antigravity CLI
+        if: steps.budget.outputs.allowed == 'true'
+        run: |
+          ${{ inputs.agy-install-command }}
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Authenticate to Google Cloud
+        if: steps.budget.outputs.allowed == 'true' && inputs.use-adc
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ inputs.gcp-project-id }}
+          workload_identity_provider: ${{ inputs.gcp-workload-identity-provider }}
+          service_account: ${{ inputs.gcp-service-account }}
+
+      - name: Configure agent sign-in
+        if: steps.budget.outputs.allowed == 'true'
+        env:
+          USE_ADC: ${{ inputs.use-adc }}
+          PROJECT: ${{ inputs.gcp-project-id }}
+          LOCATION: ${{ inputs.gcp-location }}
+        run: |
+          agy --version
+          if [ "$USE_ADC" = "true" ]; then
+            echo "AGY_ADC_AUTH=true" >> "$GITHUB_ENV"
+            echo "GOOGLE_CLOUD_QUOTA_PROJECT=$PROJECT" >> "$GITHUB_ENV"
+            echo "GOOGLE_CLOUD_LOCATION=$LOCATION" >> "$GITHUB_ENV"
+          else
+            # agy ignores GEMINI_API_KEY unless modelProvider is "gemini".
+            mkdir -p "$HOME/.gemini/antigravity-cli"
+            echo '{ "modelProvider": "gemini" }' > "$HOME/.gemini/antigravity-cli/settings.json"
+          fi
+
+      - name: Run the loop
+        id: loop
+        if: steps.budget.outputs.allowed == 'true'
+        env:
+          GEMINI_API_KEY: ${{ secrets.gemini-api-key }}
+        run: ${{ inputs.loop-command }} run --issue-file "$LOOP_DIR/issue.json" --out-dir "$LOOP_DIR"
+
+      - name: Push the branch
+        if: steps.loop.outputs.has-commits == 'true'
+        env:
+          TOKEN: ${{ secrets.github-token || github.token }}
+          BRANCH: ${{ steps.loop.outputs.branch }}
+        run: |
+          G="git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c credential.helper="
+          $G push --quiet --force --no-verify "https://x-access-token:${TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${BRANCH}"
+
+      - name: Open or update the pull request
+        id: pr
+        if: steps.loop.outputs.has-commits == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.github-token || github.token }}
+          BRANCH: ${{ steps.loop.outputs.branch }}
+          TITLE: ${{ steps.loop.outputs.pr-title }}
+          BODY_FILE: ${{ steps.loop.outputs.body-file }}
+          PASSED: ${{ steps.loop.outputs.passed }}
+          BASE: ${{ inputs.base-branch }}
+        run: |
+          base="${BASE:-$(gh repo view "$GH_REPO" --json defaultBranchRef -q .defaultBranchRef.name)}"
+          number="$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')"
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "$TITLE" --body-file "$BODY_FILE"
+            if [ "$PASSED" = "true" ]; then gh pr ready "$number" || true; fi
+            url="$(gh pr view "$number" --json url -q .url)"
+          else
+            draft=""
+            if [ "$PASSED" != "true" ]; then draft="--draft"; fi
+            url="$(gh pr create --base "$base" --head "$BRANCH" --title "$TITLE" --body-file "$BODY_FILE" $draft)"
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Update the issue
+        if: always() && steps.budget.outputs.allowed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PASSED: ${{ steps.loop.outputs.passed }}
+          BODY_FILE: ${{ steps.loop.outputs.body-file }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          WORKING: ${{ steps.config.outputs.working-label }}
+          PR_OPEN: ${{ steps.config.outputs.pr-open-label }}
+          NEEDS_HUMAN: ${{ steps.config.outputs.needs-human-label }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$PASSED" = "true" ]; then
+            gh issue edit "$ISSUE" --remove-label "$WORKING" --add-label "$PR_OPEN"
+          else
+            gh issue edit "$ISSUE" --remove-label "$WORKING" --add-label "$NEEDS_HUMAN"
+            if [ -n "$BODY_FILE" ] && [ -f "$BODY_FILE" ]; then
+              { cat "$BODY_FILE"; echo; echo "Draft PR: ${PR_URL:-none}. Run: $RUN_URL"; } > "$LOOP_DIR/comment.md"
+            else
+              echo "The agent loop crashed before it finished. Run: $RUN_URL" > "$LOOP_DIR/comment.md"
+            fi
+            gh issue comment "$ISSUE" --body-file "$LOOP_DIR/comment.md"
+          fi
+
+      - name: Record the run in the ledger
+        if: always() && steps.loop.outputs.record-file != ''
+        env:
+          TOKEN: ${{ secrets.github-token || github.token }}
+          RECORD: ${{ steps.loop.outputs.record-file }}
+        run: |
+          # The agent could write to $LEDGER_DIR, so ignore its hooks and config here too.
+          G="git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c credential.helper="
+          cp "$RECORD" "$LEDGER_DIR/runs/"
+          cd "$LEDGER_DIR"
+          $G add runs
+          $G commit --quiet --no-verify -m "ledger: record run for #${ISSUE}"
+          auth_url="https://x-access-token:${TOKEN}@github.com/${GH_REPO}.git"
+          for attempt in 1 2 3 4 5; do
+            if $G push --quiet --no-verify "$auth_url" "HEAD:refs/heads/${LEDGER_BRANCH}"; then exit 0; fi
+            $G pull --quiet --rebase "$auth_url" "$LEDGER_BRANCH" || true
+            sleep $((attempt * 2))
+          done
+          echo "::error::Could not push the run record to ${LEDGER_BRANCH}"
+          exit 1
+
+      - name: Write the job summary
+        if: always() && steps.loop.outputs.body-file != ''
+        env:
+          BODY_FILE: ${{ steps.loop.outputs.body-file }}
+        run: cat "$BODY_FILE" >> "$GITHUB_STEP_SUMMARY"
