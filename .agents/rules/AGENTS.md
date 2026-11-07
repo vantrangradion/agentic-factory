@@ -40,6 +40,7 @@ To keep the agent context window lean and fast:
   - When assigned a task or user story, the agent executes the complete 7-step lifecycle autonomously (Accept -> Plan -> Red -> Green -> Guard -> Adversarial Audit -> Ready for Review).
   - Publishes the plan in a draft PR (`gh pr create --draft`) before writing code, then continues without waiting.
   - Before marking the PR ready (`gh pr ready`), the PR description must include Red-to-Green test logs, guard passes, the adversarial audit summary, and deviations from the plan.
+  - Commit messages are one conventional-commit subject line (`feat(scope): ...`) with no body; details belong in the PR description.
 * **Story Batching and Milestone Execution:**
   - When assigned a multi-story batch or sprint milestone, execute stories sequentially in topological dependency order.
   - Never bundle multiple stories into a single monolithic PR; each story must deliver an isolated feature branch and dedicated PR.
