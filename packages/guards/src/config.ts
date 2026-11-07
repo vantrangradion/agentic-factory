@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { BUILTIN_PRESETS, deepMerge, PRESET_NAMES } from './presets.js';
 
 export interface NoCyclesConfig {
   enabled?: boolean;
@@ -50,9 +51,13 @@ export interface DeadExportsConfig {
 
 export interface FactoryConfig {
   $schema?: string;
+  /** Built-in preset names (e.g. 'agentic-factory/recommended') or relative paths to shared JSON configs. */
+  extends?: string | string[];
   project?: {
-    name: string;
-    architecture: string;
+    name?: string;
+    architecture?: string;
+    /** Restrict guards to these language adapters. Omit to route every file by extension. */
+    languages?: string[];
   };
   guards?: {
     noCycles?: NoCyclesConfig;
@@ -82,7 +87,7 @@ export function loadFactoryConfig(startDir: string = process.cwd()): FactoryConf
       if (fs.existsSync(candidate)) {
         try {
           const content = fs.readFileSync(candidate, 'utf-8');
-          return JSON.parse(content) as FactoryConfig;
+          return resolveExtends(JSON.parse(content) as FactoryConfig, path.dirname(candidate), [candidate]);
         } catch (err) {
           throw new Error(`Failed to parse factory config at ${candidate}: ${(err as Error).message}`);
         }
@@ -113,3 +118,35 @@ export function loadFactoryConfig(startDir: string = process.cwd()): FactoryConf
   };
 }
 
+
+/**
+ * Applies `extends` entries in order, then the config itself on top, so the
+ * project's own settings always win. Arrays replace rather than concatenate.
+ */
+export function resolveExtends(config: FactoryConfig, baseDir: string, seen: string[] = []): FactoryConfig {
+  const parents = config.extends === undefined ? [] : [config.extends].flat();
+  let merged: FactoryConfig = {};
+
+  for (const ref of parents) {
+    let parent: FactoryConfig;
+    if (BUILTIN_PRESETS[ref]) {
+      parent = BUILTIN_PRESETS[ref] as FactoryConfig;
+    } else if (ref.startsWith('.') || path.isAbsolute(ref)) {
+      const file = path.resolve(baseDir, ref);
+      if (seen.includes(file)) {
+        throw new Error(`Circular extends: ${[...seen, file].join(' -> ')}`);
+      }
+      if (!fs.existsSync(file)) {
+        throw new Error(`extends target not found: ${ref}`);
+      }
+      const raw = JSON.parse(fs.readFileSync(file, 'utf-8')) as FactoryConfig;
+      parent = resolveExtends(raw, path.dirname(file), [...seen, file]);
+    } else {
+      throw new Error(`Unknown preset '${ref}'. Built-in presets: ${PRESET_NAMES.join(', ')}`);
+    }
+    merged = deepMerge(merged, parent);
+  }
+
+  const { extends: _ignored, ...own } = config;
+  return deepMerge(merged, own);
+}

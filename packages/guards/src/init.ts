@@ -1,11 +1,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { FactoryConfig, BoundaryRule } from './config.js';
+import { detectLanguages } from './languages/index.js';
+import { PRESET_NAMES } from './presets.js';
 
 export interface InitOptions {
   force?: boolean;
   projectName?: string;
   architecture?: string;
+  /** Extra presets to extend, e.g. ['plain-ux']. 'recommended' is always included. */
+  presets?: string[];
 }
 
 export interface InitResult {
@@ -87,39 +91,53 @@ export function initFactoryConfig(
     ? ['packages', 'src']
     : ['src'];
 
+  // 4. Resolve presets: recommended is style-neutral; house style is opt-in.
+  const presets = ['agentic-factory/recommended'];
+  for (const name of options.presets ?? []) {
+    const full = name.includes('/') ? name : `agentic-factory/${name}`;
+    if (!PRESET_NAMES.includes(full)) {
+      throw new Error(`Unknown preset '${name}'. Built-in presets: ${PRESET_NAMES.join(', ')}`);
+    }
+    if (!presets.includes(full)) presets.push(full);
+  }
+
+  const languages = detectLanguages(projectRoot);
+  const sourceRoot = isMonorepo ? 'packages' : 'src';
+
+  const guards: NonNullable<FactoryConfig['guards']> = {
+    noCycles: {
+      enabled: true,
+      rootDir: sourceRoot,
+    },
+    boundaries,
+    secrets: {
+      enabled: true,
+    },
+    todoIssueLinks: {
+      enabled: true,
+    },
+    commentedCode: {
+      enabled: true,
+    },
+    deadExports: {
+      enabled: true,
+      rootDir: sourceRoot,
+    },
+  };
+  if (presets.includes('agentic-factory/plain-ux')) {
+    // Terms and style bans come from the preset; only the scan scope is project-specific.
+    guards.plainLanguage = { enabled: true, targetDirs };
+  }
+
   const config: FactoryConfig = {
     $schema: 'https://agentic-factory.dev/schema.json',
+    extends: presets,
     project: {
       name: projectName,
       architecture,
+      ...(languages.length > 0 ? { languages } : {}),
     },
-    guards: {
-      noCycles: {
-        enabled: true,
-        rootDir: isMonorepo ? 'packages' : 'src',
-      },
-      boundaries,
-      plainLanguage: {
-        enabled: true,
-        targetDirs,
-        forbiddenTerms: ['internal_id', 'mutex_lock', 'deadlock', 'ast_node', 'llm_hallucination'],
-        disallowEmDashes: true,
-        disallowEmojis: true,
-      },
-      secrets: {
-        enabled: true,
-      },
-      todoIssueLinks: {
-        enabled: true,
-      },
-      commentedCode: {
-        enabled: true,
-      },
-      deadExports: {
-        enabled: true,
-        rootDir: isMonorepo ? 'packages' : 'src',
-      },
-    },
+    guards,
     testing: {
       targetCoverage: 85,
       maxSuiteDurationMs: 2000,
@@ -133,6 +151,6 @@ export function initFactoryConfig(
     created: true,
     path: targetPath,
     config,
-    message: `Created ${targetPath} (${architecture} preset)`,
+    message: `Created ${targetPath} (${architecture}, extends ${presets.join(', ')})`,
   };
 }

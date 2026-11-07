@@ -54,29 +54,33 @@ pnpm add -D @agentic-factory/guards
 ```
 *(Or link locally: `"@agentic-factory/guards": "link:../agentic-factory/packages/guards"`)*
 
-**Step 2: Add `.factoryrc.json` to your project root:**
+**Step 2: Generate `.factoryrc.json`:**
+```bash
+pnpm agentic-guards init                      # style-neutral defaults
+pnpm agentic-guards init --preset plain-ux    # also enforce plain-language UX copy
+```
+
+Or write it by hand. The engine is generic; everything project-specific is data:
 ```json
 {
   "$schema": "https://agentic-factory.dev/schema.json",
-  "project": { "name": "my-app", "architecture": "modular-monorepo" },
+  "extends": ["agentic-factory/recommended"],
+  "project": { "name": "my-app", "architecture": "modular-monorepo", "languages": ["typescript", "python"] },
   "guards": {
-    "noCycles": { "enabled": true, "rootDir": "packages" },
+    "noCycles": { "rootDir": "packages" },
     "boundaries": [
       {
         "package": "packages/domain",
         "disallowImportsFrom": ["packages/adapters", "packages/infrastructure"]
       }
-    ],
-    "plainLanguage": {
-      "targetDirs": ["packages/ui", "packages/cli"],
-      "forbiddenTerms": ["deadlock", "db_pool", "internal_id"],
-      "disallowEmDashes": true,
-      "disallowEmojis": true
-    },
-    "secrets": { "enabled": true }
+    ]
   }
 }
 ```
+
+* **Languages:** files are routed to a language adapter by extension. Supported today: `typescript` (TS/JS, via the TypeScript compiler, an optional peer dependency) and `python` (no dependencies). Omit `project.languages` to check every supported language present.
+* **Presets:** `agentic-factory/recommended` (cycles, secrets, TODO links, commented-out code, dead exports) and `agentic-factory/plain-ux` (jargon list, no em dashes or emojis in user-facing copy). `extends` also accepts relative paths, so an organization can share one base config. Your own settings always win; arrays replace rather than merge.
+* **Coverage:** every guard runs on every supported language, except dead exports, which is TypeScript-only for now and reports skipped files instead of passing silently.
 
 **Step 3: Run the guards:**
 ```bash
