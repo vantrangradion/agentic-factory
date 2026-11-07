@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { SecretScanConfig } from './config.js';
+import { collectSourceFiles } from './fs-walk.js';
 
 export interface SecretViolation {
   file: string;
@@ -36,22 +37,14 @@ function calculateEntropy(str: string): number {
   return entropy;
 }
 
-function collectFiles(dir: string): string[] {
-  const results: string[] = [];
-  if (!fs.existsSync(dir)) return results;
+const SCANNED_FILE = /\.(ts|tsx|js|jsx|py|pyi|json|yaml|yml|toml|ini|cfg|md|env)$/;
+const LOCK_FILES = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lockb', 'poetry.lock'];
 
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (['node_modules', 'dist', '.git', '.gemini', 'coverage'].includes(entry.name)) continue;
-      results.push(...collectFiles(fullPath));
-    } else if (/\.(ts|tsx|js|jsx|json|yaml|yml|md|env)$/.test(entry.name)) {
-      if (['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lockb'].includes(entry.name)) continue;
-      results.push(fullPath);
-    }
-  }
-  return results;
+function collectFiles(dir: string): string[] {
+  return collectSourceFiles(dir, {
+    include: (name) => SCANNED_FILE.test(name) && !LOCK_FILES.includes(name),
+    skipDirs: ['.gemini', 'coverage'],
+  });
 }
 
 export function checkSecrets(projectRoot: string, config?: SecretScanConfig): SecretScanResult {

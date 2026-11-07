@@ -3,13 +3,27 @@
   "title": "AgenticFactoryConfig",
   "type": "object",
   "properties": {
+    "extends": {
+      "description": "Presets applied before this file. Built-in: agentic-factory/recommended, agentic-factory/plain-ux. Relative paths load shared JSON configs.",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
     "project": {
       "type": "object",
       "properties": {
         "name": { "type": "string" },
-        "architecture": { "type": "string", "enum": ["modular-monorepo", "hexagonal", "clean-architecture", "microservice"] }
-      },
-      "required": ["name"]
+        "architecture": {
+          "type": "string",
+          "description": "Free-form label, e.g. modular-monorepo, single-package, hexagonal, clean-architecture, microservice."
+        },
+        "languages": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["typescript", "python"] },
+          "description": "Restrict guards to these language adapters. Omit to route every file by extension."
+        }
+      }
     },
     "guards": {
       "type": "object",
@@ -38,7 +52,9 @@
           "properties": {
             "enabled": { "type": "boolean" },
             "targetDirs": { "type": "array", "items": { "type": "string" } },
-            "forbiddenTerms": { "type": "array", "items": { "type": "string" } }
+            "forbiddenTerms": { "type": "array", "items": { "type": "string" } },
+            "disallowEmDashes": { "type": "boolean" },
+            "disallowEmojis": { "type": "boolean" }
           }
         },
         "secrets": {
@@ -46,6 +62,32 @@
           "properties": {
             "enabled": { "type": "boolean" },
             "patterns": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "todoIssueLinks": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "targetDirs": { "type": "array", "items": { "type": "string" } },
+            "exclude": { "type": "array", "items": { "type": "string" } },
+            "issuePattern": { "type": "string" }
+          }
+        },
+        "commentedCode": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "targetDirs": { "type": "array", "items": { "type": "string" } },
+            "exclude": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "deadExports": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "rootDir": { "type": "string" },
+            "entryPoints": { "type": "array", "items": { "type": "string" } },
+            "exclude": { "type": "array", "items": { "type": "string" } }
           }
         }
       }

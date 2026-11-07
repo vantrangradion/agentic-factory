@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import ts from 'typescript';
 import { PlainLanguageConfig } from './config.js';
+import { collectSourceFiles } from './fs-walk.js';
+import { adapterForFile, getAdapters, LanguageAdapter } from './languages/index.js';
 
 export interface JargonViolation {
   file: string;
@@ -16,68 +17,85 @@ export interface PlainLanguageResult {
   summary: string;
 }
 
-function collectSourceFiles(dir: string): string[] {
-  const results: string[] = [];
-  if (!fs.existsSync(dir)) return results;
+const PROSE_FILE = /\.(md|json)$/;
 
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (['node_modules', 'dist', '.git', '__tests__'].includes(entry.name)) continue;
-      results.push(...collectSourceFiles(fullPath));
-    } else if (/\.(ts|tsx|js|jsx)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) {
-      if (/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(entry.name)) continue;
-      results.push(fullPath);
-    }
-  }
-  return results;
+function truncate(text: string): string {
+  return text.length > 60 ? `${text.slice(0, 57)}...` : text;
 }
 
-export function checkPlainLanguage(projectRoot: string, config?: PlainLanguageConfig): PlainLanguageResult {
-  if (config?.enabled === false || !config?.forbiddenTerms || config.forbiddenTerms.length === 0) {
-    return { hasViolations: false, violations: [], summary: 'PASS: Plain language check disabled or no terms configured' };
+export function checkPlainLanguage(
+  projectRoot: string,
+  config?: PlainLanguageConfig,
+  adapters: LanguageAdapter[] = getAdapters()
+): PlainLanguageResult {
+  const hasTerms = Boolean(config?.forbiddenTerms && config.forbiddenTerms.length > 0);
+  const disallowEmDashes = Boolean(config?.disallowEmDashes);
+  const disallowEmojis = Boolean(config?.disallowEmojis);
+
+  if (config?.enabled === false || (!hasTerms && !disallowEmDashes && !disallowEmojis)) {
+    return { hasViolations: false, violations: [], summary: 'PASS: Plain language check disabled or not configured' };
   }
 
-  const targetDirs = config.targetDirs || ['src'];
-  const forbiddenTerms = config.forbiddenTerms.map((t) => t.toLowerCase());
+  const targetDirs = config?.targetDirs || ['src'];
+  const termPatterns = (config?.forbiddenTerms || []).map((t) => ({
+    term: t.toLowerCase(),
+    regex: new RegExp(`\\b${t.toLowerCase()}\\b`, 'i'),
+  }));
   const violations: JargonViolation[] = [];
+
+  /**
+   * Checks one piece of user-facing text and records every rule it breaks.
+   * Prose lines report style rules before terms; string literals the reverse
+   * (the historical output order, kept stable for CI log diffs).
+   */
+  function inspect(file: string, line: number, text: string, styleFirst: boolean) {
+    const record = (term: string) =>
+      violations.push({ file: path.relative(projectRoot, file), term, snippet: truncate(text.trim()), line });
+    const checkTerms = () => {
+      for (const { term, regex } of termPatterns) {
+        if (regex.test(text)) record(term);
+      }
+    };
+    const checkStyle = () => {
+      if (disallowEmDashes && text.includes('—')) record('em-dash (—)');
+      if (disallowEmojis && /\p{Extended_Pictographic}/u.test(text)) record('emoji/icon');
+    };
+
+    if (styleFirst) {
+      checkStyle();
+      checkTerms();
+    } else {
+      checkTerms();
+      checkStyle();
+    }
+  }
 
   for (const relDir of targetDirs) {
     const fullDir = path.resolve(projectRoot, relDir);
-    const files = collectSourceFiles(fullDir);
+    const files = collectSourceFiles(fullDir, {
+      include: (name) =>
+        PROSE_FILE.test(name) || adapters.some((a) => a.isSourceFile(name) && !a.isTestFile(name)),
+      skipDirs: ['__tests__'],
+    });
 
     for (const file of files) {
       const content = fs.readFileSync(file, 'utf-8');
-      const sourceFile = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true);
 
-      function visit(node: ts.Node) {
-        if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-          const text = node.text.toLowerCase();
-          for (const term of forbiddenTerms) {
-            // Match whole word or exact token
-            const regex = new RegExp(`\\b${term}\\b`, 'i');
-            if (regex.test(text)) {
-              const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-              violations.push({
-                file: path.relative(projectRoot, file),
-                term,
-                snippet: node.text.length > 60 ? `${node.text.slice(0, 57)}...` : node.text,
-                line: line + 1,
-              });
-            }
-          }
-        }
-        ts.forEachChild(node, visit);
+      if (PROSE_FILE.test(file)) {
+        content.split('\n').forEach((lineText, idx) => inspect(file, idx + 1, lineText, true));
+        continue;
       }
 
-      visit(sourceFile);
+      const adapter = adapterForFile(adapters, file)!;
+      for (const literal of adapter.extractStrings(file, content)) {
+        inspect(file, literal.line, literal.text, false);
+      }
     }
   }
 
   const hasViolations = violations.length > 0;
   const summary = hasViolations
-    ? `FAIL: Found ${violations.length} user-facing jargon violation(s)`
+    ? `FAIL: Found ${violations.length} user-facing jargon / style violation(s)`
     : `PASS: 0 user-facing jargon violations found across target surfaces`;
 
   return { hasViolations, violations, summary };

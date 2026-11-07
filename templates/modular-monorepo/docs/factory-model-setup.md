@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}} — Factory Model & Harness Engineering Setup Checklist
+# {{PROJECT_NAME}}: Factory Model & Harness Engineering Setup Checklist
 
 **Milestone:** Sprint 0 / Foundation Setup  
 **Core Law:** $\mathbf{Agent = Model + Harness}$
@@ -37,4 +37,44 @@ flowchart TD
 ### Phase 5: Self-Verification
 - [ ] Run full pipeline: `pnpm clean && pnpm build && pnpm guard && pnpm test`.
 - [ ] Total execution under 2 seconds. Ready for autonomous story implementation.
+
+---
+
+## Operational Runbook: The 6-Step Story Lifecycle
+
+When picking up a user story from `docs/user-stories.md`:
+
+```mermaid
+flowchart TD
+    Dev["Developer (Orchestrator)"] -->|1. Triggers Story| Step1["1. Context & Implementation Plan"]
+    Step1 --> Step2["2. Red Phase (Vitest First)"]
+    Step2 --> Step3["3. Green Phase (Self-Healing Code)"]
+    Step3 --> Step4["4. Guard Phase (pnpm guard)"]
+    Step4 --> Step5["5. Adversarial Audit (Decoupled Review)"]
+    Step5 --> Step6["6. Done (Backlog Checkbox & Sign-Off)"]
+    Step6 --> DevSignOff["Developer: Approve Commit"]
+```
+
+### The 6 Steps:
+1. **Context & Plan:** Load BDD criteria, ADRs, and outline affected files, interfaces, and test scenarios.
+2. **Red Phase (Test First):** Write Vitest tests with synthetic doubles; verify failure (`Red`).
+3. **Green Phase & Feedback Loop:** Write minimal production code; autonomously diagnose and patch test failures until passing (`Green`).
+4. **Deterministic Guardrails:** Execute `pnpm guard` to enforce zero circular dependencies, boundary isolation, and secret scanning.
+5. **Adversarial Audit:** The decoupled `AdversarialReviewer` audits the diff against BDD acceptance criteria, ADR compliance, and edge-case failure paths.
+6. **Definition of Done & Sign-Off:** Update backlog checklist, present clean diff and audit report for developer review and commit.
+
+---
+
+## Responsibility Matrix: Automation vs. Human Control
+
+| Lifecycle Phase | Autonomous (Agent & Harness) | Human Control (Developer) |
+| :--- | :--- | :--- |
+| **Story Selection** | None | Selects target story from backlog based on priority |
+| **Context & Plan** | Formulates implementation plan and maps interfaces | Reviews plan for high-complexity architectural stories |
+| **Test Authoring (Red)** | Generates Vitest assertions from Gherkin specifications | Reviews test strategy if architecture changes |
+| **Implementation (Green)**| Writes minimal production code | Steers trade-offs if multiple paths exist |
+| **Self-Healing** | Parses error traces, diagnoses bugs, and iterates code | Steps in only if an external spec flaw is discovered |
+| **Quality Gates** | Runs AST linters, cycle detectors, and boundary guards | Configures project tolerances in .factoryrc.json |
+| **Adversarial Audit** | Evaluates diff against edge cases and acceptance criteria | Validates audit findings and assesses business risk |
+| **Final Sign-Off** | Marks backlog checklist done, formats clean diff summary | Reviews code changes, approves, and commits |
 
