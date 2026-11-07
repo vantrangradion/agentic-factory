@@ -1,9 +1,17 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/guards" },
-    { "path": "packages/harness" },
-    { "path": "packages/create-agentic-factory" }
+    {
+      "path": "packages/guards"
+    },
+    {
+      "path": "packages/harness"
+    },
+    {
+      "path": "packages/create-agentic-factory"
+    },
+    {
+      "path": "packages/loop"
+    }
   ]
 }
-

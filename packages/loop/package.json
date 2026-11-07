@@ -1,0 +1,41 @@
+{
+  "name": "@agentic-factory/loop",
+  "version": "0.1.0",
+  "description": "Project-agnostic agent loop: issue in, test-first pull request out, with gates, protected paths, budget and a run ledger",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vantrangradion/agentic-factory.git",
+    "directory": "packages/loop"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "agentic-factory",
+    "agent-loop",
+    "tdd",
+    "harness-engineering",
+    "gemini-cli"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "agentic-loop": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -b && chmod +x dist/cli.js",
+    "test": "vitest run"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@agentic-factory/guards": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

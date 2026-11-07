@@ -6,21 +6,36 @@
     "extends": {
       "description": "Presets applied before this file. Built-in: agentic-factory/recommended, agentic-factory/plain-ux. Relative paths load shared JSON configs.",
       "oneOf": [
-        { "type": "string" },
-        { "type": "array", "items": { "type": "string" } }
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       ]
     },
     "project": {
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
         "architecture": {
           "type": "string",
           "description": "Free-form label, e.g. modular-monorepo, single-package, hexagonal, clean-architecture, microservice."
         },
         "languages": {
           "type": "array",
-          "items": { "type": "string", "enum": ["typescript", "python"] },
+          "items": {
+            "type": "string",
+            "enum": [
+              "typescript",
+              "python"
+            ]
+          },
           "description": "Restrict guards to these language adapters. Omit to route every file by extension."
         }
       }
@@ -31,9 +46,18 @@
         "noCycles": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "rootDir": { "type": "string" },
-            "exclude": { "type": "array", "items": { "type": "string" } }
+            "enabled": {
+              "type": "boolean"
+            },
+            "rootDir": {
+              "type": "string"
+            },
+            "exclude": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "boundaries": {
@@ -41,53 +65,126 @@
           "items": {
             "type": "object",
             "properties": {
-              "package": { "type": "string" },
-              "disallowImportsFrom": { "type": "array", "items": { "type": "string" } }
+              "package": {
+                "type": "string"
+              },
+              "disallowImportsFrom": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             },
-            "required": ["package", "disallowImportsFrom"]
+            "required": [
+              "package",
+              "disallowImportsFrom"
+            ]
           }
         },
         "plainLanguage": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "targetDirs": { "type": "array", "items": { "type": "string" } },
-            "forbiddenTerms": { "type": "array", "items": { "type": "string" } },
-            "disallowEmDashes": { "type": "boolean" },
-            "disallowEmojis": { "type": "boolean" }
+            "enabled": {
+              "type": "boolean"
+            },
+            "targetDirs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "forbiddenTerms": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "disallowEmDashes": {
+              "type": "boolean"
+            },
+            "disallowEmojis": {
+              "type": "boolean"
+            }
           }
         },
         "secrets": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "patterns": { "type": "array", "items": { "type": "string" } }
+            "enabled": {
+              "type": "boolean"
+            },
+            "patterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "todoIssueLinks": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "targetDirs": { "type": "array", "items": { "type": "string" } },
-            "exclude": { "type": "array", "items": { "type": "string" } },
-            "issuePattern": { "type": "string" }
+            "enabled": {
+              "type": "boolean"
+            },
+            "targetDirs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "exclude": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "issuePattern": {
+              "type": "string"
+            }
           }
         },
         "commentedCode": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "targetDirs": { "type": "array", "items": { "type": "string" } },
-            "exclude": { "type": "array", "items": { "type": "string" } }
+            "enabled": {
+              "type": "boolean"
+            },
+            "targetDirs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "exclude": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "deadExports": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "rootDir": { "type": "string" },
-            "entryPoints": { "type": "array", "items": { "type": "string" } },
-            "exclude": { "type": "array", "items": { "type": "string" } }
+            "enabled": {
+              "type": "boolean"
+            },
+            "rootDir": {
+              "type": "string"
+            },
+            "entryPoints": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "exclude": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       }
@@ -95,11 +192,250 @@
     "testing": {
       "type": "object",
       "properties": {
-        "targetCoverage": { "type": "number" },
-        "maxSuiteDurationMs": { "type": "number" },
-        "requireSyntheticScenarios": { "type": "boolean" }
+        "targetCoverage": {
+          "type": "number"
+        },
+        "maxSuiteDurationMs": {
+          "type": "number"
+        },
+        "requireSyntheticScenarios": {
+          "type": "boolean"
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "description": "Settings for the autonomous agent loop (@agentic-factory/loop). Everything project-specific about the loop lives here.",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "gates"
+      ],
+      "properties": {
+        "runner": {
+          "type": "string",
+          "enum": [
+            "antigravity-cli"
+          ],
+          "description": "Agent backend. Only antigravity-cli (agy) is implemented."
+        },
+        "model": {
+          "type": "string",
+          "description": "Default model for issues that no route matches."
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ready": {
+              "type": "string"
+            },
+            "working": {
+              "type": "string"
+            },
+            "prOpen": {
+              "type": "string"
+            },
+            "needsHuman": {
+              "type": "string"
+            }
+          },
+          "description": "Issue labels. Defaults: agent:ready, agent:working, agent:pr-open, agent:needs-human."
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Files the agent reads before changing anything. Default: [\"AGENTS.md\"]."
+        },
+        "gates": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Gate ladder, cheapest first. The loop stops at the first failure.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "run"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "run": {
+                "type": "string",
+                "description": "Shell command run from the project root."
+              },
+              "timeoutMs": {
+                "type": "number",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        "tdd": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Run a tests-only red phase that must fail before the implementation. Default true."
+            },
+            "redGate": {
+              "type": "string",
+              "description": "Gate that must fail after the red phase. Default \"test\"."
+            },
+            "testFiles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Globs that identify test files."
+            }
+          }
+        },
+        "protectedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Globs the agent may never change; the loop reverts them. .factoryrc.json and .github/** are always protected."
+        },
+        "maxAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Attempts per phase before the issue goes to a human. Default 3."
+        },
+        "sessionTimeoutMs": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Wall-clock limit for one agent session. Default 30 minutes."
+        },
+        "branchPrefix": {
+          "type": "string",
+          "description": "Default \"agent/\"."
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "weeklyUsd": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Weekly spend cap in USD. Omit for no cap."
+            },
+            "bugOnlyAt": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "description": "Fraction of the cap after which only bug issues run. Default 0.8."
+            },
+            "stopAt": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Fraction of the cap after which the loop stops until Monday. Default 1.0."
+            },
+            "bugLabels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Default [\"bug\"]."
+            },
+            "utcOffset": {
+              "type": "string",
+              "pattern": "^[+-]\\d{2}:\\d{2}$",
+              "description": "Offset for the start of the week (Monday 00:00), e.g. \"+07:00\"."
+            },
+            "pricing": {
+              "description": "USD per million tokens: one price for every model, or a map from model id to price. Required with weeklyUsd.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "inputPerMTok",
+                    "outputPerMTok"
+                  ],
+                  "properties": {
+                    "inputPerMTok": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "outputPerMTok": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "cachedInputPerMTok": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "inputPerMTok",
+                      "outputPerMTok"
+                    ],
+                    "properties": {
+                      "inputPerMTok": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "outputPerMTok": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "cachedInputPerMTok": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "routes": {
+          "type": "array",
+          "description": "Fixed label-based routing to other models of the same vendor. The first route with a matching issue label wins.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "labels",
+              "model"
+            ],
+            "properties": {
+              "labels": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "model": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "setup": {
+          "type": "string",
+          "description": "Installs dependencies in a fresh clone before a local run, e.g. \"pnpm install --frozen-lockfile\"."
+        },
+        "ledgerBranch": {
+          "type": "string",
+          "description": "Orphan branch holding one JSON record per run. Default \"factory-ledger\"."
+        }
       }
     }
   }
 }
-
