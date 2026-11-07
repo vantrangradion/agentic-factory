@@ -1,7 +1,7 @@
 # {{PROJECT_NAME}}: Product Backlog & BDD User Stories
 
 **Methodology:** Persona-grounded user stories with Gherkin BDD Acceptance Criteria.  
-**Execution Loop:** Red (Test) $\rightarrow$ Green (Implement) $\rightarrow$ Guard (`pnpm guard`) $\rightarrow$ Sign-off.
+**Execution Loop:** Accept (Ready) $\rightarrow$ Plan (Draft PR) $\rightarrow$ Red (Test) $\rightarrow$ Green (Implement) $\rightarrow$ Guard (`pnpm guard`) $\rightarrow$ Audit $\rightarrow$ Ready for Review.
 
 ---
 

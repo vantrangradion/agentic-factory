@@ -50,23 +50,28 @@ All packages must compile with zero warnings, all guards pass, and test suite co
 
 ## 2. Operational Story Execution Runbook
 
-Once the factory floor is verified, execute user stories using the **6-Step Orchestrator <-> Agent Lifecycle**:
+Once the factory floor is verified, execute user stories using the **7-Step Story Lifecycle**. It has two human checkpoints, both asynchronous so milestone batches keep moving: the plan is reviewed in a draft PR before code lands, and the finished PR is reviewed before merge.
 
-1. **Story Trigger, Context Loading & Implementation Plan:**
-   - Developer specifies target user story.
-   - Agent loads BDD scenarios, ADRs, and boundary rules.
-   - Agent outlines an implementation plan (affected files, interfaces, synthetic test scenarios, edge cases) before modifying code.
-2. **Red Phase (Test First):**
+1. **Accept (Definition of Ready):**
+   - Developer assigns the story (or a milestone batch).
+   - Agent loads the BDD scenarios, ADRs, and boundary rules, then confirms the story is ready: every acceptance criterion is testable, every dependency story is merged or is the branch this one builds on, and no open questions or non-automatable human gates remain.
+   - If any check fails, do not start. Report exactly what is missing and move to the next ready story in the batch.
+2. **Plan in a Draft PR:**
+   - Create the story branch, push a plan commit (`git commit --allow-empty -m "plan(<story-id>): <title>"`), and open a draft PR (`gh pr create --draft`).
+   - The PR body starts with a `## Plan` section: affected files, interfaces, synthetic test scenarios, edge cases, and risks.
+   - Continue immediately; do not wait for approval. A reviewer rejects the plan by requesting changes on the draft PR.
+3. **Red Phase (Test First):**
    - Agent authors unit or contract tests matching Gherkin acceptance criteria.
    - Runs tests and confirms expected failure (`Red`) using synthetic data.
-3. **Green Phase & Autonomous Feedback Loop:**
+4. **Green Phase & Autonomous Feedback Loop:**
    - Agent implements minimal production code.
    - If tests or compiler fail, agent autonomously diagnoses error traces and iterates to `Green`.
-4. **Deterministic Guard Verification:**
-   - Agent runs `pnpm guard` to enforce AST cycle limits, package boundaries, UX language rules, and secret scanning.
-5. **Adversarial Audit & Trajectory Review:**
-   - The decoupled `AdversarialReviewer` agent audits the git diff against acceptance criteria, ADR compliance, and the 20% edge cases (unhandled errors, rate limits, resource cleanup).
-6. **Definition of Done & Human Sign-Off:**
-   - Agent marks story completed in backlog.
-   - Agent presents clean diff and adversarial audit report for human developer approval.
+5. **Deterministic Guard Verification:**
+   - Agent runs the project's guards (`pnpm guard` or the configured equivalent) to enforce cycle limits, package boundaries, UX language rules, and secret scanning.
+6. **Adversarial Audit & Trajectory Review:**
+   - The decoupled `AdversarialReviewer` agent audits the diff against the acceptance criteria, ADR compliance, the `## Plan` in the PR, and the 20% edge cases (unhandled errors, rate limits, resource cleanup).
+7. **Ready for Review & Human Sign-Off:**
+   - Agent appends Red/Green logs, guard results, the audit report, and a `## Deviations from Plan` section (or "None") to the PR body, then marks it ready (`gh pr ready`).
+   - Agent marks the story done in the backlog only after the developer merges.
 
+**If a plan is rejected after work has moved on:** revise the plan in the PR body, restart that story from step 3, then rebase every dependent story branch onto the revised one and re-run its tests and guards. The `milestone-watchdog` skill detects this state.

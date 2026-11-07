@@ -107,8 +107,9 @@ ln -sfn ~/agentic-factory/plugin ~/.gemini/config/plugins/agentic-factory
 * `/factory-harness`: 5-phase harness setup checklists.
 * `/architecture-decision`: ADR trade-off analyzer.
 * `/user-story-authoring`: Spec-to-BDD story decomposition.
+* `/milestone-watchdog`: Rebuild a story batch's state from git and GitHub, report what needs attention, and safely resume interrupted or rejected work.
 * **Subagents:** `SpecArchitect`, `HarnessEngineer`, `GuardEnforcer`, `AdversarialReviewer`.
-* **The 6-Step Story Lifecycle:** Context & Implementation Plan -> Red Phase (TDD) -> Green Phase (Self-Healing) -> Guard Phase (`agentic-guards`) -> Adversarial Audit -> Human Sign-Off.
+* **The 7-Step Story Lifecycle:** Accept (Definition of Ready) -> Plan (draft PR) -> Red Phase (TDD) -> Green Phase (Self-Healing) -> Guard Phase (`agentic-guards`) -> Adversarial Audit -> Ready for Review & Human Sign-Off. The plan and the finished PR are both reviewed asynchronously, so batches never stall waiting for approval.
 
 ---
 

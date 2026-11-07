@@ -8,7 +8,8 @@
     { "name": "factory-harness", "path": "skills/factory-harness" },
     { "name": "architecture-decision", "path": "skills/architecture-decision" },
     { "name": "user-story-authoring", "path": "skills/user-story-authoring" },
-    { "name": "practical-test-pyramid", "path": "skills/practical-test-pyramid" }
+    { "name": "practical-test-pyramid", "path": "skills/practical-test-pyramid" },
+    { "name": "milestone-watchdog", "path": "skills/milestone-watchdog" }
   ],
   "agents": [
     {
