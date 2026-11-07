@@ -2,7 +2,7 @@
 
 **Date:** YYYY-MM-DD  
 **Status:** Accepted | Proposed | Superseded  
-**Deciders:** [Dylan / Lead Architect]  
+**Deciders:** [Name / Role]  
 
 ---
 

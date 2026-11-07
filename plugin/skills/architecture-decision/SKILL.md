@@ -36,7 +36,7 @@ Every architectural decision follows a rigorous 4-step process:
 ### Step 1: Anchor in the Spec & Critically Challenge Assumptions
 - Extract the core problem, user needs, functional goals, and non-functional budgets from `docs/spec.md`.
 - Identify hard constraints:
-  - Memory & CPU budgets (e.g., <250 MB idle RSS, <400 MB burst).
+  - Memory & CPU budgets (the idle and burst limits the spec defines).
   - Security & privacy rules (encryption at rest, OS keystore, zero PII in repo).
   - Target user constraints (non-technical sales rep, no terminal, no config files).
   - Timeline & scope commitments (Must vs Should).

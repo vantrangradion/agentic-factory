@@ -117,7 +117,7 @@ Commit / Fast Stage (< 5 min)
 └── Fast In-Memory DB Integration Tests (SQLite / SQLCipher)
       │
 Acceptance & Contract Stage (< 15 min)
-├── WireMock / Mock Margince Contract Tests
+├── WireMock / Mock Third-Party API Contract Tests
 ├── Isolated UI Component Tests (Testing Library)
 └── Lint & Boundary AST Guards
       │

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-verify_backlog.py - Automated validation script for Chat Bridge User Story Catalog.
+verify_backlog.py - Automated validation script for a user story catalog.
 Validates:
 1. All stories have dependencies, persona, and BDD acceptance criteria (Given/When/Then).
 2. High-level Epic and Backlog matrix tables match story details 1:1.
-3. Zero local absolute file paths (e.g. file:/// or /Users/).
+3. Zero local absolute file paths (file://, /Users/, /home/, C:\\Users\\).
 4. All Epics are aligned with sprints without cross-sprint fragmentation.
 """
 
@@ -17,9 +17,9 @@ def verify_catalog(doc_path: Path) -> bool:
     errors = []
 
     # 1. Local path leak check
-    local_leaks = re.findall(r"file://|/Users/\w+", content)
+    local_leaks = re.findall(r"file://|/Users/\w+|/home/\w+|[A-Za-z]:\\Users\\", content)
     if local_leaks:
-        errors.append(f"Found {len(local_leaks)} local path leaks (file:// or /Users/). Use relative links.")
+        errors.append(f"Found {len(local_leaks)} local path leaks (file://, /Users/, /home/, C:\\Users\\). Use relative links.")
 
     # 2. Extract story detail blocks
     story_pattern = re.compile(
