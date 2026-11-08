@@ -25,6 +25,8 @@ export interface GitOps {
   filesChangedSince(from: string): string[];
   /** A file's content at `ref`, or null if absent. */
   showFile(ref: string, file: string): string | null;
+  /** Files `commitAll` would commit right now: tracked and new files that exist on disk, without ignored ones. */
+  filesToCommit(): string[];
 }
 
 export interface GitOpsOptions {
@@ -104,6 +106,17 @@ export function createGitOps(cwd: string, opts: GitOpsOptions = {}): GitOps {
       } catch {
         return null;
       }
+    },
+    filesToCommit: () => {
+      const listed = git('ls-files', '-z', '--cached', '--others', '--exclude-standard').split('\0').filter(Boolean);
+      return [...new Set(listed)].filter((f) => {
+        try {
+          fs.lstatSync(path.join(cwd, f));
+          return true;
+        } catch {
+          return false;
+        }
+      }).sort();
     },
   };
 }

@@ -13,7 +13,7 @@ import { readRecords, writeRecord } from './ledger.js';
 import { runLoop } from './loop.js';
 import { renderBudgetReport, renderFailureComment, renderPrBody } from './render.js';
 import { createRunner } from './runner.js';
-import { createLocalDeps, watch } from './local.js';
+import { createLocalDeps, sandboxDeps, watch } from './local.js';
 import { runIssue } from './run-issue.js';
 import { printTrace } from './trace.js';
 import { wasInterrupted } from './interrupt.js';
@@ -130,10 +130,12 @@ switch (command) {
     // CI: the agent and its gates must not see the runner's file commands or tokens; git must not run anything from .git.
     const env = agentEnv(process.env, path.join(outDir, 'agent-env'));
     const snapshot = snapshotGitDir(cwd);
+    const gitOps = createGitOps(cwd, { beforeCommand: () => restoreGitDir(snapshot) });
     const result = runLoop(issue, config, contextFiles, {
       runner: createRunner(config.runner, { model, timeoutMs: config.sessionTimeoutMs, env, logDir: path.join(outDir, 'sessions'), ...(process.env['AGENTIC_LOOP_AGENT_BIN'] ? { binary: process.env['AGENTIC_LOOP_AGENT_BIN'] } : {}) }),
-      git: createGitOps(cwd, { beforeCommand: () => restoreGitDir(snapshot) }),
+      git: gitOps,
       exec: makeShellExecutor(env),
+      ...sandboxDeps(config, { listFiles: () => gitOps.filesToCommit(), workRoot: outDir, env, log: (m) => console.log(m) }),
       cwd,
       now: () => new Date(),
       log: (m) => console.log(m),

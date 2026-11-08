@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { wantsReview, type ResolvedAgentConfig } from './config.js';
+import { wantsReview, type ResolvedAgentConfig, type ResolvedGate } from './config.js';
 import { firstFailure, runGates, type CommandExecutor, type GateResult } from './gates.js';
 import type { GitOps } from './git.js';
 import { matchesAny } from './glob.js';
@@ -9,11 +9,14 @@ import { costUsd, type AttemptRecord, type PhaseRecord, type ReviewRecord, type 
 import { buildPrompt, type Phase } from './prompt.js';
 import { buildReviewPrompt, describeFindings, isActionable, parseFindings, type Finding } from './review.js';
 import { addUsage, ZERO_USAGE, type AgentRunner, type AgentRunResult, type TokenUsage } from './runner.js';
+import type { GateRunner } from './sandbox.js';
 
 export interface LoopDeps {
   runner: AgentRunner;
   git: GitOps;
   exec: CommandExecutor;
+  /** Runs a gate ladder. Default: each gate on the host in `cwd` with `exec`. */
+  runGates?: GateRunner;
   cwd: string;
   now: () => Date;
   log: (message: string) => void;
@@ -133,6 +136,7 @@ export function runLoop(
 ): LoopResult {
   if (opts.stage !== 'full' && !config.tdd.enabled) throw new Error(`Stage "${opts.stage}" needs tdd.enabled`);
   const { runner, git, exec, cwd, log } = deps;
+  const ladder = (gates: readonly ResolvedGate[]): GateResult[] => (deps.runGates ? deps.runGates(gates, cwd) : runGates(gates, cwd, exec));
   const startedAt = deps.now().toISOString();
   const isBug = issue.labels.some((l) => config.budget.bugLabels.includes(l));
   const branch = `${config.branchPrefix}issue-${issue.number}`;
@@ -256,7 +260,8 @@ export function runLoop(
         continue;
       }
 
-      const [gate] = runGates([redGate], cwd, exec);
+      const redResults = ladder([redGate]);
+      const gate = redResults.find((r) => r.name === redGate.name);
       if (!gate) throw new Error('Red gate produced no result');
       if (deps.shouldStop?.()) {
         stopReason = STOPPED;
@@ -265,6 +270,15 @@ export function runLoop(
       }
       // Late writes (a background process, a test) must not reach the commit.
       enforceScope(base, 'red');
+      const blocked = firstFailure(redResults);
+      if (gate.status === 'skipped' && blocked) {
+        // Setup failed, so the tests never ran: that is not proof they fail.
+        caughtBy.push(blocked.name);
+        notes.push(`"${blocked.name}" failed (\`${blocked.command}\`, exit code ${blocked.exitCode}), so the tests did not run. Last lines of its output:\n${fence(blocked.outputTail)}`);
+        phase.attempts.push(attemptRecord(attempt, res, redResults, scope, `gate:${blocked.name}`));
+        feedback = notes.join('\n\n');
+        continue;
+      }
       if (gate.status === 'pass') {
         caughtBy.push('red-not-failing');
         notes.push(
@@ -319,7 +333,7 @@ export function runLoop(
         continue;
       }
 
-      const gates = runGates(config.gates, cwd, exec);
+      const gates = ladder(config.gates);
       finalGates = gates;
       if (deps.shouldStop?.()) {
         stopReason = STOPPED;
@@ -387,7 +401,7 @@ export function runLoop(
         review.fixNote = 'The agent changed nothing in the fix round.';
         phase.attempts.push(attemptRecord(1, fixRes, [], scope, 'no-changes'));
       } else {
-        const gates = runGates(config.gates, cwd, exec);
+        const gates = ladder(config.gates);
         const failed = firstFailure(gates);
         if (failed) {
           git.restore(headBefore, git.changedFiles(headBefore));

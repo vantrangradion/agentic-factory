@@ -20,3 +20,4 @@ export * from './review.js';
 export * from './trace.js';
 export * from './git-safety.js';
 export * from './interrupt.js';
+export * from './sandbox.js';
