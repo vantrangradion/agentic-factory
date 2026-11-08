@@ -12,6 +12,7 @@ import { runLoop } from './loop.js';
 import { watchOnce, type RunIssueDeps } from './run-issue.js';
 import { createRunner } from './runner.js';
 import { agentEnv } from './safe-env.js';
+import { assertDockerAvailable, createDockerGateRunner, type GateRunner } from './sandbox.js';
 import { restoreGitDir, type GitDirSnapshot } from './git-safety.js';
 import { prepareWorkspace, pushBranch } from './workspace.js';
 
@@ -93,11 +94,13 @@ export function createLocalDeps(opts: LocalOptions): RunIssueDeps {
         onSessionStart: (f: string) => opts.log(`#${issue.number}: follow the agent live with: agentic-loop trace "${f}" --follow`),
         ...(bin ? { binary: bin } : {}),
       };
+      const gitOps = createGitOps(dir, { beforeCommand: () => restoreGitDir(trusted(dir)) });
       return runLoop(issue, config, contextFiles, {
         runner: createRunner(config.runner, { model, ...runnerOpts }),
         reviewRunner: createRunner(config.runner, { model: config.review.model ?? model, ...runnerOpts }),
-        git: createGitOps(dir, { beforeCommand: () => restoreGitDir(trusted(dir)) }),
+        git: gitOps,
         exec,
+        ...sandboxDeps(config, { listFiles: () => gitOps.filesToCommit(), workRoot, env, log: opts.log }),
         cwd: dir,
         now: () => new Date(),
         log: opts.log,
@@ -111,6 +114,27 @@ export function createLocalDeps(opts: LocalOptions): RunIssueDeps {
     },
     now: () => new Date(),
     log: opts.log,
+  };
+}
+
+/** The Docker gate runner when `agent.sandbox` is set; nothing otherwise. Fails fast if Docker is not running. */
+export function sandboxDeps(
+  config: ResolvedAgentConfig,
+  opts: { listFiles: () => string[]; workRoot: string; env: NodeJS.ProcessEnv; log: (m: string) => void },
+): { runGates?: GateRunner } {
+  if (!config.sandbox) return {};
+  assertDockerAvailable();
+  opts.log(`Gates run in Docker (${config.sandbox.image}), ${config.sandbox.gateNetwork ? 'with' : 'without'} network`);
+  return {
+    runGates: createDockerGateRunner({
+      sandbox: config.sandbox,
+      setup: config.setup,
+      listFiles: opts.listFiles,
+      stagingDir: path.join(opts.workRoot, 'gates'),
+      cacheDir: path.join(opts.workRoot, 'sandbox-cache'),
+      env: opts.env,
+      log: opts.log,
+    }),
   };
 }
 

@@ -184,7 +184,12 @@ pnpm exec agentic-loop watch --take-unassigned
 * **What the agent can reach:** the agent runs as you, so this is a guard against accidents, not a sandbox. Its sessions and the gates get an environment with no GitHub tokens, an empty `gh` config, no git credential helpers or SSH agent, and pushing from the clone is disabled. The loop pushes afterwards with a token from `gh auth token`, sent as a header and never stored.
 * **Git safety:** the loop's own git commands ignore system and global config and switch off hooks, fsmonitor and credential helpers. Before each one, the clone's `.git/config`, `hooks/` and `info/` are reset to a snapshot taken before the agent ran, so nothing the agent plants in `.git` runs with your login.
 * **Trusted input only:** issues from outsiders are skipped, and only comments by owners, members and collaborators reach the agent. Pull requests from forks are ignored.
-* **Known gaps:** gates run in the working folder, so an ignored file could make them pass; helpers that tests import are not locked; run one watcher per GitHub login.
+* **Sandboxed gates (optional):** add `"sandbox": { "image": "<image with your toolchain>" }` to the `agent` section and setup and gates run in Docker instead of on your machine. Each gate run starts from a fresh copy of only the files the commit would contain (no `.git`, no ignored files). `setup` runs first with network and a package cache; each gate then runs in its own container with no network, no Linux capabilities, your user id, and no environment from your machine except names listed in `sandbox.env`. Set `gateNetwork: true` if a gate really needs network, and `memory`/`cpus` to cap resources. The agent session itself still runs on your machine. The image must have the toolchain installed for real: corepack's `pnpm` and `yarn` shims download the package manager on first use, which fails without network. For pnpm:
+  ```dockerfile
+  FROM node:22-bookworm-slim
+  RUN corepack disable && npm install --global --force pnpm@<your version>
+  ```
+* **Known gaps:** without `sandbox`, gates run in the working folder, so an ignored file could make them pass; the agent session is not sandboxed and can reach Docker; helpers that tests import are not locked; run one watcher per GitHub login.
 * **Ctrl+C** stops before the next attempt and still reports on the issue; press it twice to quit at once.
 
 **Step 2b: Or run it in GitHub Actions (needs an API key or Vertex AI credentials).**
@@ -222,7 +227,7 @@ jobs:
 * **`github-token`:** use a GitHub App token or fine-grained PAT. Pull requests opened with the default `GITHUB_TOKEN` do not trigger your CI.
 * **ADC instead of an API key:** set `use-adc: true` with `gcp-project-id`, `gcp-workload-identity-provider` and `gcp-service-account`. The workflow then sets `AGY_ADC_AUTH=true` and `GOOGLE_CLOUD_QUOTA_PROJECT`.
 * **Plan approval in CI:** not supported yet. The `run` command refuses `plan.approval: "required"`; use local mode, or `"none"` for CI.
-* **Experimental:** the agent shares the runner with later steps, so run it in a container before relying on it.
+* **Experimental:** the agent shares the runner with later steps. `sandbox` moves setup and gates into containers, but the agent session still runs on the runner.
 * **Not yet run in CI:** the `agy` steps follow the Antigravity docs but have not been tested on a GitHub runner, and ADC with a service account (rather than a person's login) is not confirmed by the docs.
 * **Who can start it:** only people who can add labels (triage access or above).
 * **What the agent can reach:** the repository checkout and the model credentials. It never receives a GitHub token, and `.factoryrc.json` and `.github/**` are always protected.

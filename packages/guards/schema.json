@@ -434,6 +434,19 @@
         "ledgerBranch": {
           "type": "string",
           "description": "Orphan branch holding one JSON record per run. Default \"factory-ledger\"."
+        },
+        "sandbox": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image"],
+          "description": "Run setup and gates in Docker instead of on the host. Each gate run gets a fresh copy of only the files the commit would contain; setup has network, gates do not. The agent session still runs on the host.",
+          "properties": {
+            "image": { "type": "string", "minLength": 1, "description": "Docker image with the project's toolchain, e.g. one built from node:22 with pnpm installed." },
+            "env": { "type": "array", "items": { "type": "string" }, "description": "Names of host environment variables passed into the containers. Default none." },
+            "gateNetwork": { "type": "boolean", "description": "Give gates network access. Default false." },
+            "memory": { "type": "string", "description": "Docker memory limit, e.g. \"4g\"." },
+            "cpus": { "type": "number", "exclusiveMinimum": 0, "description": "Docker CPU limit, e.g. 2." }
+          }
         }
       }
     }

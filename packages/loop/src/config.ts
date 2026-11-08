@@ -18,6 +18,14 @@ export const DEFAULT_TEST_FILES = [
   '**/*_test.go',
 ];
 
+export interface ResolvedSandbox {
+  image: string;
+  env: string[];
+  gateNetwork: boolean;
+  memory: string | null;
+  cpus: number | null;
+}
+
 export interface ResolvedPricing {
   inputPerMTok: number;
   outputPerMTok: number;
@@ -44,6 +52,8 @@ export interface ResolvedAgentConfig {
   branchPrefix: string;
   setup: string | null;
   ledgerBranch: string;
+  /** Null: setup and gates run on the host. */
+  sandbox: ResolvedSandbox | null;
   budget: {
     weeklyUsd: number | null;
     bugOnlyAt: number;
@@ -162,6 +172,16 @@ export function resolveAgentConfig(raw: AgentConfig | undefined): ResolvedAgentC
     }
   }
 
+  const sb = cfg.sandbox;
+  if (sb !== undefined) {
+    if (!sb || typeof sb.image !== 'string' || !sb.image.trim()) problems.push('sandbox.image is required: a Docker image with the project\'s toolchain');
+    if (sb?.env !== undefined && !(Array.isArray(sb.env) && sb.env.every((v) => typeof v === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(v)))) {
+      problems.push('sandbox.env must be a list of environment variable names');
+    }
+    if (sb?.memory !== undefined && !/^\d+[bkmg]?$/i.test(String(sb.memory))) problems.push('sandbox.memory must look like "4g"');
+    if (sb?.cpus !== undefined && !(typeof sb.cpus === 'number' && sb.cpus > 0)) problems.push('sandbox.cpus must be greater than 0');
+  }
+
   if (problems.length > 0) throw new AgentConfigError(problems);
 
   return {
@@ -187,6 +207,9 @@ export function resolveAgentConfig(raw: AgentConfig | undefined): ResolvedAgentC
     branchPrefix: cfg.branchPrefix ?? 'agent/',
     setup: cfg.setup ?? null,
     ledgerBranch: cfg.ledgerBranch ?? 'factory-ledger',
+    sandbox: sb
+      ? { image: sb.image, env: sb.env ?? [], gateNetwork: sb.gateNetwork ?? false, memory: sb.memory ?? null, cpus: sb.cpus ?? null }
+      : null,
     budget: {
       weeklyUsd: b.weeklyUsd ?? null,
       bugOnlyAt,

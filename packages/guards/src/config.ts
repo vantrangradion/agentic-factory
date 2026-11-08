@@ -57,6 +57,20 @@ export interface AgentGate {
   timeoutMs?: number;
 }
 
+/** Runs setup and gates in Docker instead of on the host. The agent session itself still runs on the host. */
+export interface AgentSandboxConfig {
+  /** Docker image with the project's toolchain (bash, node, pnpm, ...). Gates have no network, so nothing can be fetched at gate time. */
+  image: string;
+  /** Names of host environment variables passed into the containers. Default none. */
+  env?: string[];
+  /** Give gates network access. Default false: only setup has network. */
+  gateNetwork?: boolean;
+  /** Docker memory limit, e.g. "4g". */
+  memory?: string;
+  /** Docker CPU limit, e.g. 2. */
+  cpus?: number;
+}
+
 export interface AgentBudgetConfig {
   /** Weekly spend cap in USD. Omit for no cap. */
   weeklyUsd?: number;
@@ -141,6 +155,8 @@ export interface AgentConfig {
   setup?: string;
   /** Orphan branch holding one JSON record per run. Default "factory-ledger". */
   ledgerBranch?: string;
+  /** Run setup and gates in Docker. Omit to run them on the host. */
+  sandbox?: AgentSandboxConfig;
   budget?: AgentBudgetConfig;
 }
 
