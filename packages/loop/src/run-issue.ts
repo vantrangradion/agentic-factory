@@ -7,6 +7,7 @@ import { TRUSTED_ASSOCIATIONS, type GitHubIssue, type GitHubOps, type RepoInfo }
 import { matchesAny } from './glob.js';
 import type { Issue } from './issue.js';
 import { costUsd, readRecords, writeRecord, type RunRecord, type Stage } from './ledger.js';
+import { extractPlan } from './plan.js';
 import type { LedgerStore } from './ledger-store.js';
 import type { LoopDeps, LoopOptions, LoopResult } from './loop.js';
 import { addUsage, ZERO_USAGE, type TokenUsage } from './runner.js';
@@ -26,6 +27,10 @@ export interface PreparedWorkspace {
   diffBase: string;
   /** Files the checked-out branch changes relative to `diffBase`. Empty for a fresh branch. */
   changedFiles: string[];
+  /** When the checked-out branch last got a commit (ISO time), before any rebase. Comments after it are new. */
+  branchUpdatedAt?: string;
+  /** Files that conflicted when rebasing the checked-out branch onto the default branch. Setup did not run. */
+  rebaseConflicts?: string[];
 }
 
 export interface RunIssueDeps {
@@ -160,9 +165,23 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
 
     const dir = path.join(deps.workRoot, 'work', `issue-${n}`);
     const ws = deps.prepare(dir, labelConfig.setup, stage === 'build' ? branch : null);
+    if (ws.rebaseConflicts) {
+      needsHuman(
+        `The plan branch \`${branch}\` no longer applies to \`${deps.repo.defaultBranch}\`: rebasing it conflicts in ${ws.rebaseConflicts.map((f) => `\`${f}\``).join(', ')}. Nothing was built. Rebase the branch by hand and add \`${L.planApproved}\` again, or add \`${L.ready}\` to write a new plan.\n`,
+      );
+      log(`#${n}: NEEDS HUMAN: rebase conflict in ${ws.rebaseConflicts.join(', ')}`);
+      return { outcome: 'needs-human', reason: 'the plan branch conflicts with the default branch', stage };
+    }
     const config = deps.loadConfig(dir);
     const loopOpts: LoopOptions = { stage, diffBase: ws.diffBase };
-    if (stage === 'build') loopOpts.lockedTests = ws.changedFiles.filter((f) => matchesAny(f, config.tdd.testFiles));
+    if (stage === 'build' && existingPr) {
+      loopOpts.lockedTests = ws.changedFiles.filter((f) => matchesAny(f, config.tdd.testFiles));
+      const plan = extractPlan(gh.prBody(existingPr));
+      if (plan) loopOpts.approvedPlan = plan;
+      // Comments older than the branch's last commit were answered by that commit (or by the plan).
+      const feedback = gh.prFeedback(existingPr, ws.branchUpdatedAt);
+      if (feedback) loopOpts.buildFeedback = feedback;
+    }
     if (stage === 'plan' && existingPr) {
       const feedback = gh.prFeedback(existingPr);
       if (feedback) loopOpts.planFeedback = feedback;
@@ -175,7 +194,7 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
       ? renderFailureComment(loopIssue, result, config)
       : planReady
         ? renderPlanPrBody(loopIssue, result, config)
-        : renderPrBody(loopIssue, result);
+        : renderPrBody(loopIssue, result, config);
     const bodyFile = writeFile(outDir, 'pr-body.md', body);
 
     let prUrl: string | undefined;

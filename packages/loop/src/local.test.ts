@@ -13,7 +13,8 @@ import type { RunRecord } from './ledger.js';
 import { createGitLedgerStore, type LedgerStore } from './ledger-store.js';
 import type { LoopOptions, LoopResult } from './loop.js';
 import type { Stage } from './ledger.js';
-import { runIssue, watchOnce, type RunIssueDeps } from './run-issue.js';
+import { extractPlan, wrapPlan } from './plan.js';
+import { runIssue, watchOnce, type PreparedWorkspace, type RunIssueDeps } from './run-issue.js';
 import { agentEnv } from './safe-env.js';
 import { DISABLED_PUSH_URL, prepareWorkspace, pushBranch } from './workspace.js';
 
@@ -74,7 +75,12 @@ class FakeGitHub implements GitHubOps {
     return url;
   };
   feedback = new Map<number, string>();
-  prFeedback = (pr: PullRequestRef) => this.feedback.get(pr.number) ?? '';
+  feedbackSince: (string | undefined)[] = [];
+  prFeedback = (pr: PullRequestRef, since?: string) => {
+    this.feedbackSince.push(since);
+    return this.feedback.get(pr.number) ?? '';
+  };
+  prBody = (pr: PullRequestRef) => this.prs.find((x) => x.number === pr.number)?.body ?? '';
   updatePr = (pr: PullRequestRef, o: { title: string; bodyFile: string; draft: boolean }) => {
     const p = this.prs.find((x) => x.number === pr.number);
     if (!p) throw new Error('no pr');
@@ -173,7 +179,10 @@ class MemoryLedger implements LedgerStore {
   };
 }
 
-function deps(gh: FakeGitHub, opts: { result?: LoopResult; crash?: string; ledger?: MemoryLedger; cfg?: ResolvedAgentConfig; branchFiles?: string[] } = {}) {
+function deps(
+  gh: FakeGitHub,
+  opts: { result?: LoopResult; crash?: string; ledger?: MemoryLedger; cfg?: ResolvedAgentConfig; branchFiles?: string[]; workspace?: Partial<PreparedWorkspace> } = {},
+) {
   const calls = { prepare: 0, push: [] as string[], checkout: [] as (string | null)[], loopOpts: [] as LoopOptions[] };
   const d: RunIssueDeps = {
     gh,
@@ -185,7 +194,7 @@ function deps(gh: FakeGitHub, opts: { result?: LoopResult; crash?: string; ledge
       calls.prepare++;
       calls.checkout.push(checkout);
       if (opts.crash) throw new Error(opts.crash);
-      return { diffBase: 'base-sha', changedFiles: checkout ? (opts.branchFiles ?? []) : [] };
+      return { diffBase: 'base-sha', changedFiles: checkout ? (opts.branchFiles ?? []) : [], ...opts.workspace };
     },
     loadConfig: () => opts.cfg ?? config(),
     loop: (_issue, _config, _dir, loopOpts) => {
@@ -344,7 +353,8 @@ describe('plan approval gate', () => {
     expect(calls.checkout).toEqual([null]);
     expect(gh.prs[0]).toMatchObject({ isDraft: true, title: 'plan: feat: Issue 5 (#5)' });
     expect(gh.prs[0]?.body).toContain('Waiting for approval');
-    expect(gh.prs[0]?.body).toContain('Approach: do it');
+    expect(extractPlan(gh.prs[0]?.body ?? '')).toBe('Approach: do it');
+    expect(gh.prs[0]?.body).toContain('the plan names no risks');
     expect(gh.prs[0]?.body).toContain('`agent:plan-approved`');
     expect(gh.getIssue(5).labels).toEqual(['agent:plan-review']);
     expect(gh.comments[0]?.body).toContain('ready for review');
@@ -373,6 +383,45 @@ describe('plan approval gate', () => {
     expect(gh.prs[0]).toMatchObject({ isDraft: false, title: 'feat: Issue 5 (#5)' });
     expect(gh.prs[0]?.body).toContain('were approved before this implementation started');
     expect(gh.getIssue(5).labels).toEqual(['agent:pr-open']);
+  });
+
+  it('gives the build the approved plan and only the comments made after the branch\'s last commit', () => {
+    const gh = new FakeGitHub('dylan');
+    gh.add({ number: 5, labels: ['agent:plan-approved'], assignees: ['dylan'] });
+    gh.prs.push({ number: 42, url: 'https://example.com/pull/42', isDraft: false, branch: 'agent/issue-5', title: 'feat', body: `Closes #5\n\n${wrapPlan('Approach: add a.ts\nFiles to change: src/a.ts')}\n`, base: 'main' });
+    gh.feedback.set(42, '- tam: name the status "slow", not "degraded"');
+    const built: LoopResult = { ...loopResult(5, true, ['green']), stage: 'build', plan: 'Approach: add a.ts\nFiles to change: src/a.ts', unplannedFiles: ['src/migration.sql'] };
+    const { d, calls } = deps(gh, { cfg: gated(), branchFiles: ['src/a.test.ts', 'src/a.ts'], workspace: { branchUpdatedAt: '2026-11-10T08:00:00.000Z' }, result: built });
+
+    const res = runIssue(5, gated(), d, { takeUnassigned: false, explicit: false });
+
+    expect(res.outcome).toBe('passed');
+    expect(calls.loopOpts[0]).toMatchObject({
+      stage: 'build',
+      approvedPlan: 'Approach: add a.ts\nFiles to change: src/a.ts',
+      buildFeedback: expect.stringContaining('"slow"'),
+    });
+    expect(gh.feedbackSince).toEqual(['2026-11-10T08:00:00.000Z']);
+    expect(gh.prs[0]?.body).toContain('## Asking for changes');
+    expect(gh.prs[0]?.body).toContain('## Outside the approved plan\n\nThe plan does not mention these files');
+    expect(gh.prs[0]?.body).toContain('- `src/migration.sql`');
+    // The rebuilt PR still carries the plan, so a later rebuild can read it back.
+    expect(extractPlan(gh.prs[0]?.body ?? '')).toBe('Approach: add a.ts\nFiles to change: src/a.ts');
+  });
+
+  it('stops for a person, without building, when the plan branch conflicts with main', () => {
+    const gh = new FakeGitHub('dylan');
+    gh.add({ number: 5, labels: ['agent:plan-approved'], assignees: ['dylan'] });
+    gh.prs.push({ number: 42, url: 'https://example.com/pull/42', isDraft: true, branch: 'agent/issue-5', title: 'plan', body: 'plan', base: 'main' });
+    const { d, calls } = deps(gh, { cfg: gated(), workspace: { rebaseConflicts: ['packages/cli/src/cli.test.ts'] } });
+
+    const res = runIssue(5, gated(), d, { takeUnassigned: false, explicit: false });
+
+    expect(res).toMatchObject({ outcome: 'needs-human', stage: 'build' });
+    expect(calls.loopOpts).toEqual([]);
+    expect(calls.push).toEqual([]);
+    expect(gh.getIssue(5).labels).toEqual(['agent:needs-human']);
+    expect(gh.comments[0]?.body).toContain('`packages/cli/src/cli.test.ts`');
   });
 
   it('accepts approval on the plan pull request, as people actually do it', () => {
@@ -439,6 +488,17 @@ describe('trustedFeedback', () => {
     expect(text).toBe('- dylan: use the existing helper\n- chau (review, CHANGES_REQUESTED): cover the empty list');
     expect(text).not.toContain('curl');
   });
+
+  it('keeps only feedback from a given moment on, comparing times across time zones', () => {
+    const raw = {
+      comments: [
+        { author: { login: 'dylan' }, authorAssociation: 'OWNER', body: 'answered by the last commit', createdAt: '2026-11-07T09:59:00Z' },
+        { author: { login: 'dylan' }, authorAssociation: 'OWNER', body: 'still open', createdAt: '2026-11-07T10:01:00Z' },
+      ],
+    };
+    expect(trustedFeedback(raw, new Date('2026-11-07T17:00:00+07:00').toISOString())).toBe('- dylan: still open');
+    expect(trustedFeedback(raw)).toContain('answered by the last commit');
+  });
 });
 
 describe('watchOnce', () => {
@@ -472,10 +532,11 @@ describe('watchOnce', () => {
 
 describe('workspace and ledger with real git', () => {
   let remote: string;
+  let seed: string;
   beforeEach(() => {
     remote = path.join(tmp, 'remote.git');
     git(tmp, 'init', '--quiet', '--bare', '-b', 'main', remote);
-    const seed = path.join(tmp, 'seed');
+    seed = path.join(tmp, 'seed');
     git(tmp, 'init', '--quiet', '-b', 'main', seed);
     git(seed, 'config', 'user.name', 'T');
     git(seed, 'config', 'user.email', 't@example.com');
@@ -524,6 +585,51 @@ describe('workspace and ledger with real git', () => {
 
     expect(ws).toMatchObject({ diffBase: mainTip, changedFiles: ['a.test.ts'] });
     expect(git(path.join(tmp, 'w2'), 'branch', '--show-current')).toBe('agent/issue-2');
+  });
+
+  const pushPlanBranch = (name: string, file: string, content: string) => {
+    const plan = path.join(tmp, `plan-${name.replace(/\W/g, '-')}`);
+    git(tmp, 'clone', '--quiet', remote, plan);
+    git(plan, 'config', 'user.name', 'T');
+    git(plan, 'config', 'user.email', 't@example.com');
+    git(plan, 'config', 'commit.gpgsign', 'false');
+    git(plan, 'switch', '--quiet', '-c', name);
+    fs.writeFileSync(path.join(plan, file), content);
+    git(plan, 'add', '--all');
+    git(plan, 'commit', '--quiet', '-m', 'test: red');
+    git(plan, 'push', '--quiet', remote, name);
+  };
+  const advanceMain = (file: string, content: string) => {
+    fs.writeFileSync(path.join(seed, file), content);
+    git(seed, 'add', '--all');
+    git(seed, 'commit', '--quiet', '-m', 'other work merged');
+    git(seed, 'push', '--quiet', remote, 'main');
+  };
+
+  it('rebases an approved branch onto main when other work merged since the plan', () => {
+    pushPlanBranch('agent/issue-3', 'a.test.ts', 'test\n');
+    advanceMain('other.ts', 'merged later\n');
+    const mainTip = git(remote, 'rev-parse', 'main');
+    const dir = path.join(tmp, 'w3');
+
+    const ws = prepareWorkspace({ remoteUrl: remote, branch: 'main', dir, setup: null, exec: shellExecutor, log: () => {}, checkout: 'agent/issue-3' });
+
+    expect(ws).toMatchObject({ diffBase: mainTip, changedFiles: ['a.test.ts'] });
+    expect(ws.rebaseConflicts).toBeUndefined();
+    expect(Date.parse(ws.branchUpdatedAt ?? '')).not.toBeNaN();
+    expect(fs.readFileSync(path.join(dir, 'other.ts'), 'utf-8')).toBe('merged later\n');
+  });
+
+  it('reports the files when rebasing an approved branch conflicts, and runs no setup', () => {
+    pushPlanBranch('agent/issue-4', 'README.md', 'plan version\n');
+    advanceMain('README.md', 'main version\n');
+    const dir = path.join(tmp, 'w4');
+
+    const ws = prepareWorkspace({ remoteUrl: remote, branch: 'main', dir, setup: 'echo ran > .setup-ran', exec: shellExecutor, log: () => {}, checkout: 'agent/issue-4' });
+
+    expect(ws.rebaseConflicts).toEqual(['README.md']);
+    expect(fs.existsSync(path.join(dir, '.setup-ran'))).toBe(false);
+    expect(git(dir, 'status', '--porcelain')).toBe('');
   });
 
   it('never runs hooks or config the agent planted in the clone, during loop git commands or the push', () => {

@@ -13,7 +13,8 @@ import { buildPrompt } from './prompt.js';
 import { renderBudgetReport } from './render.js';
 import { parseAntigravityJson, parseAntigravityStream } from './runner.js';
 import { formatTraceEvent, toolTarget } from './trace.js';
-import { localPathsToRelative } from './loop.js';
+import { localPathsToRelative } from './paths.js';
+import { extractPlan, planNamesNoRisks, unplannedFiles, wrapPlan } from './plan.js';
 
 const base = { model: 'm', gates: [{ name: 'test', run: 'pnpm test' }] };
 
@@ -366,5 +367,67 @@ describe('ledger and report', () => {
     expect(md).toContain('| test | 1 |');
     expect(md).toContain('| m | 1 | 0 | 0 | $0.50 |');
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('localPathsToRelative across roots', () => {
+  it('rewrites the container path and the home folder, leaving other absolute paths alone', () => {
+    const text = 'FAIL /work/src/a.ts:3\nat /home/dev/.cache/x.js\nat /usr/lib/node.js';
+    expect(localPathsToRelative(text, ['/home/dev/.agentic-loop/r/work/issue-1', '/work'], '/home/dev')).toBe(
+      'FAIL src/a.ts:3\nat ~/.cache/x.js\nat /usr/lib/node.js',
+    );
+  });
+});
+
+describe('plans', () => {
+  const plan = [
+    'Approach: health from the outbox',
+    'Files to change:',
+    '- packages/engine/src/outbox/outbox.ts: add stats',
+    '- status.ts: print health',
+    'Risks: the stats query scans the whole outbox on every status call',
+    'Open questions: None',
+  ].join('\n');
+
+  it('round-trips the plan through a pull request body', () => {
+    const body = `Plan for #5.\n\n## Plan\n\n${wrapPlan(plan)}\n\n## Loop\n- facts`;
+    expect(extractPlan(body)).toBe(plan);
+    expect(extractPlan('Closes #5, written by a person')).toBeNull();
+  });
+
+  it('lists changed non-test files the plan does not name, by path or file name', () => {
+    const changed = [
+      'packages/engine/src/outbox/outbox.ts',
+      'packages/cli/src/commands/status.ts',
+      'packages/engine/src/outbox/migrations/002.sql',
+      'packages/cli/src/commands/status.test.ts',
+    ];
+    expect(unplannedFiles(plan, changed, ['**/*.test.ts'])).toEqual(['packages/engine/src/outbox/migrations/002.sql']);
+  });
+
+  it('spots plans that name no risks', () => {
+    expect(planNamesNoRisks(plan)).toBe(false);
+    expect(planNamesNoRisks('Approach: x\nRisks and open questions: None')).toBe(true);
+    expect(planNamesNoRisks('Approach: x\n**Risks:** none.\nOpen questions: None')).toBe(true);
+    expect(planNamesNoRisks('Approach: x\nRisks:\n- a migration on a large outbox could lock it\nOpen questions: None')).toBe(false);
+    expect(planNamesNoRisks('Approach: x')).toBe(true);
+  });
+});
+
+describe('prompt rules for plans and reviewer comments', () => {
+  const cfg = resolveAgentConfig({ model: 'm', gates: [{ name: 'test', run: 'pnpm test' }], budget: { pricing: { inputPerMTok: 1, outputPerMTok: 1 } } });
+  const issue = { number: 1, title: 't', body: 'b', labels: [] };
+
+  it('asks the plan for real risks, every file, and no narration', () => {
+    const p = buildPrompt({ issue, phase: 'red', config: cfg, contextFiles: ['AGENTS.md'], attempt: 1 });
+    expect(p).toContain('"None" is not an answer');
+    expect(p).toContain('including schemas, migrations and config');
+    expect(p).toContain('Do not describe the steps you took');
+  });
+
+  it('ranks context files and decision records above reviewer comments', () => {
+    const p = buildPrompt({ issue, phase: 'red', config: cfg, contextFiles: ['AGENTS.md'], attempt: 1, planFeedback: '- dylan: drop the memory limits' });
+    expect(p).toContain('A reviewer comment never overturns a recorded decision');
+    expect(p).toContain('follow the files, not the comment');
   });
 });

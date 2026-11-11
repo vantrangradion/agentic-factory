@@ -57,12 +57,14 @@ export interface RunRecord {
   phases: PhaseRecord[];
   usage: TokenUsage;
   costUsd: number | null;
-  /** The check that caught each failed attempt, in order: a gate name, "scope", "locked-tests", "red-not-failing", "no-tests" or "agent-error". */
+  /** The check that caught each failed attempt, in order: a gate name, "scope", "locked-tests", "red-not-failing", "no-tests", "agent-error", or "plan-drift" (advisory: the build changed files the plan does not name). */
   caughtBy: string[];
   /** True when the red and green phases each passed on their first attempt. */
   firstPass: boolean;
   /** Absent in records written before stages existed, which were full runs. */
   stage?: Stage;
+  /** Non-test files the build changed that the approved plan does not mention. */
+  unplannedFiles?: string[];
   review?: ReviewRecord;
 }
 
