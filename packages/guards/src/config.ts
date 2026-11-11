@@ -175,6 +175,17 @@ export interface AgentConfig {
   ledgerBranch?: string;
   /** Run setup and gates in Docker. Omit to run them on the host. */
   sandbox?: AgentSandboxConfig;
+  /**
+   * GitHub logins to notify. The loop posts with the runner's own login, and
+   * GitHub never notifies people of their own actions, so without this nobody
+   * hears about a plan or pull request waiting for them.
+   */
+  reviewers?: {
+    /** Asked to review plan pull requests, and mentioned when a run needs a person. */
+    plan?: string[];
+    /** Asked to review pull requests whose gates pass. */
+    pr?: string[];
+  };
   budget?: AgentBudgetConfig;
 }
 

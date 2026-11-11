@@ -60,6 +60,8 @@ export interface ResolvedAgentConfig {
   ledgerBranch: string;
   /** Null: setup and gates run on the host. */
   sandbox: ResolvedSandbox | null;
+  /** GitHub logins, without "@". */
+  reviewers: { plan: string[]; pr: string[] };
   budget: {
     weeklyUsd: number | null;
     bugOnlyAt: number;
@@ -97,6 +99,8 @@ export class AgentConfigError extends Error {
     super(`Invalid "agent" config in .factoryrc.json:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
   }
 }
+
+const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 
 const DEFAULT_GATE_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -192,6 +196,17 @@ export function resolveAgentConfig(raw: AgentConfig | undefined): ResolvedAgentC
     }
   }
 
+  const reviewers = { plan: [] as string[], pr: [] as string[] };
+  for (const key of ['plan', 'pr'] as const) {
+    const list: unknown = cfg.reviewers?.[key];
+    if (list === undefined) continue;
+    if (!Array.isArray(list) || !list.every((l) => typeof l === 'string' && GITHUB_LOGIN.test(l.replace(/^@/, '')))) {
+      problems.push(`reviewers.${key} must be a list of GitHub logins, e.g. ["octocat"]`);
+      continue;
+    }
+    reviewers[key] = [...new Set((list as string[]).map((l) => l.replace(/^@/, '')))];
+  }
+
   if (problems.length > 0) throw new AgentConfigError(problems);
 
   return {
@@ -220,6 +235,7 @@ export function resolveAgentConfig(raw: AgentConfig | undefined): ResolvedAgentC
     sandbox: sb
       ? { image: sb.image, env: sb.env ?? [], gateNetwork: sb.gateNetwork ?? false, memory: sb.memory ?? null, cpus: sb.cpus ?? null, agent: sb.agent ?? false, authVolume: sb.authVolume ?? DEFAULT_AUTH_VOLUME }
       : null,
+    reviewers,
     budget: {
       weeklyUsd: b.weeklyUsd ?? null,
       bugOnlyAt,

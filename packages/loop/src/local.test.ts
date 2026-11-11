@@ -80,7 +80,13 @@ class FakeGitHub implements GitHubOps {
     this.feedbackSince.push(since);
     return this.feedback.get(pr.number) ?? '';
   };
-  prBody = (pr: PullRequestRef) => this.prs.find((x) => x.number === pr.number)?.body ?? '';
+  reviewRequests: { pr: number; logins: string[] }[] = [];
+  failReviewRequests = false;
+  requestReview = (pr: number, logins: readonly string[]) => {
+    if (this.failReviewRequests) throw new Error('reviewer is not a collaborator');
+    this.reviewRequests.push({ pr, logins: [...logins] });
+  };
+    prBody = (pr: PullRequestRef) => this.prs.find((x) => x.number === pr.number)?.body ?? '';
   updatePr = (pr: PullRequestRef, o: { title: string; bodyFile: string; draft: boolean }) => {
     const p = this.prs.find((x) => x.number === pr.number);
     if (!p) throw new Error('no pr');
@@ -472,6 +478,64 @@ describe('plan approval gate', () => {
 
     expect(runIssue(5, gated(), d, { takeUnassigned: false, explicit: false }).outcome).toBe('crashed');
     expect(gh.getIssue(5).labels).toEqual(['agent:needs-human']);
+  });
+});
+
+describe('notifying people', () => {
+  const people = (extra: Record<string, unknown> = {}) => config({ reviewers: { plan: ['dylan', 'tam'], pr: ['huy', 'bela'] }, ...extra });
+
+  it('asks the plan reviewers to review a plan, and mentions them on the issue, but never the runner', () => {
+    const gh = new FakeGitHub('dylan');
+    gh.add({ number: 5, labels: ['agent:ready'], assignees: ['dylan'] });
+    const cfg = people({ plan: { approval: 'required' } });
+    const { d } = deps(gh, { cfg, result: { ...loopResult(5, true, ['red']), stage: 'plan', plan: 'Approach: do it' } });
+
+    expect(runIssue(5, cfg, d, { takeUnassigned: false, explicit: false }).outcome).toBe('plan-ready');
+    expect(gh.reviewRequests).toEqual([{ pr: 100, logins: ['tam'] }]);
+    expect(gh.comments[0]?.body).toContain('cc @tam');
+    expect(gh.comments[0]?.body).not.toContain('@dylan');
+  });
+
+  it('asks the PR reviewers to review a pull request whose gates pass', () => {
+    const gh = new FakeGitHub('dylan');
+    gh.add({ number: 5, labels: ['agent:ready'], assignees: ['dylan'] });
+    const { d } = deps(gh, { cfg: people() });
+
+    expect(runIssue(5, people(), d, { takeUnassigned: false, explicit: false }).outcome).toBe('passed');
+    expect(gh.reviewRequests).toEqual([{ pr: 100, logins: ['huy', 'bela'] }]);
+  });
+
+  it('mentions the plan reviewers when a run needs a person', () => {
+    const gh = new FakeGitHub('dylan');
+    gh.add({ number: 5, labels: ['agent:ready'], assignees: ['dylan'] });
+    const { d } = deps(gh, { cfg: people(), result: loopResult(5, false, ['red']) });
+
+    expect(runIssue(5, people(), d, { takeUnassigned: false, explicit: false }).outcome).toBe('needs-human');
+    expect(gh.reviewRequests).toEqual([]);
+    expect(gh.comments[0]?.body).toContain('cc @tam');
+  });
+
+  it('still finishes the run when a review request fails', () => {
+    const gh = new FakeGitHub('dylan');
+    gh.add({ number: 5, labels: ['agent:ready'], assignees: ['dylan'] });
+    gh.failReviewRequests = true;
+    const logs: string[] = [];
+    const { d } = deps(gh, { cfg: people() });
+    d.log = (m) => logs.push(m);
+
+    expect(runIssue(5, people(), d, { takeUnassigned: false, explicit: false }).outcome).toBe('passed');
+    expect(gh.getIssue(5).labels).toEqual(['agent:pr-open']);
+    expect(logs.join('\n')).toContain('WARN could not request review from huy, bela');
+  });
+
+  it('requests nothing and mentions nobody without reviewers', () => {
+    const gh = new FakeGitHub('dylan');
+    gh.add({ number: 5, labels: ['agent:ready'], assignees: ['dylan'] });
+    const { d } = deps(gh, { result: loopResult(5, false, ['red']) });
+
+    runIssue(5, config(), d, { takeUnassigned: false, explicit: false });
+    expect(gh.reviewRequests).toEqual([]);
+    expect(gh.comments[0]?.body).not.toContain('cc @');
   });
 });
 

@@ -446,6 +446,15 @@
           "type": "string",
           "description": "Orphan branch holding one JSON record per run. Default \"factory-ledger\"."
         },
+        "reviewers": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "GitHub logins to notify. The loop posts as the runner, and GitHub never notifies people of their own actions.",
+          "properties": {
+            "plan": { "type": "array", "items": { "type": "string" }, "description": "Asked to review plan pull requests, and mentioned when a run needs a person." },
+            "pr": { "type": "array", "items": { "type": "string" }, "description": "Asked to review pull requests whose gates pass." }
+          }
+        },
         "sandbox": {
           "type": "object",
           "additionalProperties": false,

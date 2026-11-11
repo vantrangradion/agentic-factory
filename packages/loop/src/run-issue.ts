@@ -83,6 +83,21 @@ function toLoopIssue(i: GitHubIssue): Issue {
   return { number: i.number, title: i.title, body: i.body, labels: i.labels, url: i.url };
 }
 
+/** Logins other than the runner's: GitHub rejects a review request from a PR's own author and never notifies people of their own posts. */
+export function others(logins: readonly string[], me: string): string[] {
+  return logins.filter((l) => l.toLowerCase() !== me.toLowerCase());
+}
+
+/** A line that mentions people so GitHub notifies them, or nothing. */
+export function ccLine(logins: readonly string[]): string {
+  return logins.length > 0 ? `\ncc ${logins.map((l) => `@${l}`).join(' ')}\n` : '';
+}
+
+function prNumber(url: string | undefined): number | null {
+  const m = /\/pull\/(\d+)/.exec(url ?? '');
+  return m ? Number(m[1]) : null;
+}
+
 function writeFile(dir: string, name: string, text: string): string {
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, name);
@@ -149,9 +164,22 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
   if (existingPr?.labels?.includes(L.planApproved)) gh.editPrLabels(existingPr.number, [], [L.planApproved]);
   log(`#${n}: claimed by ${deps.me} for the ${stage} stage. ${budget.reason}`);
 
+  // The clean clone's config replaces this once it is loaded.
+  let people = labelConfig.reviewers;
   const needsHuman = (text: string): void => {
     gh.editLabels(n, [L.needsHuman], [L.working]);
-    gh.comment(n, writeFile(outDir, 'comment.md', text));
+    gh.comment(n, writeFile(outDir, 'comment.md', text + ccLine(others(people.plan, deps.me))));
+  };
+  // A failed notification never fails the run: the labels and comments already say what happened.
+  const requestReview = (url: string | undefined, logins: readonly string[]): void => {
+    const pr = prNumber(url);
+    const who = others(logins, deps.me);
+    if (pr === null || who.length === 0) return;
+    try {
+      gh.requestReview(pr, who);
+    } catch (err) {
+      log(`#${n}: WARN could not request review from ${who.join(', ')}: ${(err as Error).message}`);
+    }
   };
 
   let result: LoopResult | undefined;
@@ -173,6 +201,7 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
       return { outcome: 'needs-human', reason: 'the plan branch conflicts with the default branch', stage };
     }
     const config = deps.loadConfig(dir);
+    people = config.reviewers;
     const loopOpts: LoopOptions = { stage, diffBase: ws.diffBase };
     if (stage === 'build' && existingPr) {
       loopOpts.lockedTests = ws.changedFiles.filter((f) => matchesAny(f, config.tdd.testFiles));
@@ -216,12 +245,14 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
 
     if (planReady) {
       gh.editLabels(n, [config.labels.planReview], [L.working]);
-      gh.comment(n, writeFile(outDir, 'comment.md', `A plan and failing tests are ready for review: ${prUrl ?? 'no pull request'}\n\nAdd \`${config.labels.planApproved}\` to build it, or comment on the pull request and add \`${config.labels.ready}\` to re-plan.\n`));
+      requestReview(prUrl, config.reviewers.plan);
+      gh.comment(n, writeFile(outDir, 'comment.md', `A plan and failing tests are ready for review: ${prUrl ?? 'no pull request'}\n\nAdd \`${config.labels.planApproved}\` to build it, or comment on the pull request and add \`${config.labels.ready}\` to re-plan.\n${ccLine(others(config.reviewers.plan, deps.me))}`));
       log(`#${n}: PLAN READY ${prUrl ?? ''}`);
       return { outcome: 'plan-ready', reason: 'waiting for plan approval', stage, ...(prUrl ? { prUrl } : {}) };
     }
     if (result.passed) {
       gh.editLabels(n, [config.labels.prOpen], [L.working]);
+      requestReview(prUrl, config.reviewers.pr);
       log(`#${n}: PASS ${prUrl ?? ''}`);
       return { outcome: 'passed', reason: 'all gates pass', stage, ...(prUrl ? { prUrl } : {}) };
     }

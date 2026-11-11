@@ -46,6 +46,12 @@ describe('resolveAgentConfig', () => {
     expect(c.runner).toBe('antigravity-cli');
   });
 
+  it('reads reviewers as GitHub logins, with or without "@"', () => {
+    expect(resolveAgentConfig(base).reviewers).toEqual({ plan: [], pr: [] });
+    expect(resolveAgentConfig({ ...base, reviewers: { plan: ['@dylan', 'dylan'], pr: ['huy-le'] } }).reviewers).toEqual({ plan: ['dylan'], pr: ['huy-le'] });
+    expect(() => resolveAgentConfig({ ...base, reviewers: { pr: ['not a login'] } })).toThrow('reviewers.pr must be a list of GitHub logins');
+  });
+
   it('lists every problem at once', () => {
     try {
       resolveAgentConfig({ gates: [{ name: 'lint', run: 'x' }, { name: 'lint', run: 'y' }], budget: { weeklyUsd: 5 } });
