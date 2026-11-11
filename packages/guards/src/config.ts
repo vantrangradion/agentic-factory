@@ -81,11 +81,11 @@ export interface AgentSandboxConfig {
   cpus?: number;
   /**
    * Run each agent session in a container from `image` too (which must have
-   * `agy` installed), instead of on the host. Default false. Sign in once per
-   * machine with `agentic-loop login`.
+   * the runner's CLI installed: `agy` or `claude`), instead of on the host.
+   * Default false. Sign in once per machine with `agentic-loop login`.
    */
   agent?: boolean;
-  /** Docker volume holding the agent's login from `agentic-loop login`. Default "agentic-loop-agy-auth". */
+  /** Docker volume holding the agent's login from `agentic-loop login`. Default "agentic-loop-agy-auth" for agy, "agentic-loop-claude-auth" for Claude Code. */
   authVolume?: string;
 }
 
@@ -119,11 +119,11 @@ export interface AgentRoute {
 }
 
 export interface AgentConfig {
-  /** Agent backend. Only "antigravity-cli" (`agy`) is implemented; the field leaves room for other vendors. */
-  runner?: 'antigravity-cli';
+  /** Agent CLI: "antigravity-cli" (`agy`, Gemini models, the default) or "claude-code" (`claude`, Claude models). */
+  runner?: 'antigravity-cli' | 'claude-code';
   /** Default model for every issue that no route matches. Required. */
   model?: string;
-  /** Fixed label-based routing to other models of the same vendor. Never chosen by the agent. */
+  /** Fixed label-based routing to other models of the runner's vendor. Never chosen by the agent. */
   routes?: AgentRoute[];
   labels?: {
     ready?: string;

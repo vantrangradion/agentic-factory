@@ -148,6 +148,7 @@ Label an issue `agent:ready` and the loop writes failing tests and a plan; appro
 ```json
 {
   "agent": {
+    "runner": "antigravity-cli",
     "model": "<default model id>",
     "routes": [{ "labels": ["chore", "docs"], "model": "<smaller model id>" }],
     "context": ["AGENTS.md", "docs/spec.md"],
@@ -175,7 +176,16 @@ Label an issue `agent:ready` and the loop writes failing tests and a plan; appro
 ```
 Set `pricing` to your models' real prices (or one price object for all models). Routes are fixed in config and checked in order; the agent never picks its own model. Every run records its model, and the report compares models by cost per run, since tokens are not comparable across models. `pnpm exec agentic-loop check-config` validates the section and lists every problem at once.
 
-**Step 2: Run it on your machine.** Uses your `gh` login and your agent login (`agy`), so a seat-based plan works:
+**Choosing the agent CLI.** `runner` picks the vendor; every model id in the config must belong to it:
+
+| `runner` | CLI | Models | Notes |
+|---|---|---|---|
+| `antigravity-cli` (default) | `agy` | Gemini | Stops itself at `sessionTimeoutMs`. |
+| `claude-code` | `claude` | Claude | Has no time limit of its own, so the loop kills the session at `sessionTimeoutMs`. Refuses to skip permission prompts as root, so run it as a normal user. |
+
+The rest of the loop does not change with the vendor: red and green phases, plan gate, gates, protected paths, budget and ledger all work the same. Each vendor is one adapter in `packages/loop/src/vendors/` (how to start a headless session, read its trace, and sign in inside the container); adding another means writing one adapter and adding its id to `RUNNERS`.
+
+**Step 2: Run it on your machine.** Uses your `gh` login and your agent login (`agy` or `claude`), so a seat-based plan works:
 ```bash
 pnpm exec agentic-loop run-issue 42          # one issue, now
 pnpm exec agentic-loop watch                 # poll every 60 s for ready issues assigned to you
@@ -197,6 +207,8 @@ pnpm exec agentic-loop watch --take-unassigned
   RUN curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- --dir /usr/local/bin
   ```
   Sign in once per machine with `pnpm exec agentic-loop login`. It opens a sign-in URL, you paste the code back, and only the login token is saved to the volume `agentic-loop-agy-auth` (set `sandbox.authVolume` to use another). Your own agy login on the host is not used. Before each run the loop checks the image has agy and the volume has a login, and the run record names the agy version. The installer cannot pin a version, so rebuild the image on purpose to upgrade. Plugins and settings from your host agy are not available in the container; put what the agent needs in `context`. 
+
+  With `"runner": "claude-code"` the image needs `claude` instead (`RUN npm install -g @anthropic-ai/claude-code`), and `login` runs `claude setup-token`: approve access in the browser, then paste the token it prints. Only that token is saved, to the volume `agentic-loop-claude-auth`, and each session gets it as `CLAUDE_CODE_OAUTH_TOKEN`. It needs a Claude Pro, Max, Team or Enterprise plan and lasts a year.
 * **Known gaps:** without `sandbox`, gates run in the working folder, so an ignored file could make them pass; without `sandbox.agent`, the agent session runs as you and can reach Docker; with it, the agent has open network and can read its own login token, so it could still send repository contents out; helpers that tests import are not locked; run one watcher per GitHub login.
 * **Who gets told:** the loop posts as you, and GitHub never notifies you of your own posts. Set `"reviewers": { "plan": ["<login>"], "pr": ["<login>", "<login>"] }` and the loop requests a review from the plan reviewers on each plan pull request, from the PR reviewers when the gates pass, and mentions the plan reviewers when a run needs a person. The runner is left out of both lists. A failed request is logged and never fails the run.
 * **Chat (Gradion Workspace):** add `"notify": { "workspace": { "channel": "<channel id>", "cc": { "plan": "@<name>", "pr": "@<name> @<name>" } } }` and set `AGENTIC_LOOP_WORKSPACE_TOKEN` to a personal API token with Write access to that channel only. The loop posts when a plan is ready, when a pull request is ready and when a run needs a person, with the issue title and links only. The token is never given to the agent or the gates. Without the variable, nothing is posted; a failed post is logged and never fails the run.

@@ -1,4 +1,5 @@
 import type { AgentConfig, ModelPricing } from '@agentic-factory/guards';
+import { VENDORS } from './vendors/index.js';
 
 export interface ResolvedGate {
   name: string;
@@ -26,10 +27,11 @@ export interface ResolvedSandbox {
   cpus: number | null;
   /** The agent session runs in a container too. */
   agent: boolean;
-  /** Docker volume holding the agent's login. */
+  /** Docker volume holding the agent's login. Default: one per vendor, e.g. "agentic-loop-agy-auth". */
   authVolume: string;
 }
 
+/** The login volume for agy, the default runner. Other vendors default to their own volume. */
 export const DEFAULT_AUTH_VOLUME = 'agentic-loop-agy-auth';
 
 export interface ResolvedPricing {
@@ -38,7 +40,8 @@ export interface ResolvedPricing {
   cachedInputPerMTok: number;
 }
 
-export const RUNNERS = ['antigravity-cli'] as const;
+/** Agent CLIs the loop can drive. Each has an adapter in ./vendors. */
+export const RUNNERS = ['antigravity-cli', 'claude-code'] as const;
 export type RunnerName = (typeof RUNNERS)[number];
 
 export interface ResolvedAgentConfig {
@@ -219,8 +222,9 @@ export function resolveAgentConfig(raw: AgentConfig | undefined): ResolvedAgentC
 
   if (problems.length > 0) throw new AgentConfigError(problems);
 
+  const runner: RunnerName = cfg.runner ?? 'antigravity-cli';
   return {
-    runner: cfg.runner ?? 'antigravity-cli',
+    runner,
     model: cfg.model as string,
     routes,
     labels: {
@@ -243,7 +247,7 @@ export function resolveAgentConfig(raw: AgentConfig | undefined): ResolvedAgentC
     setup: cfg.setup ?? null,
     ledgerBranch: cfg.ledgerBranch ?? 'factory-ledger',
     sandbox: sb
-      ? { image: sb.image, env: sb.env ?? [], gateNetwork: sb.gateNetwork ?? false, memory: sb.memory ?? null, cpus: sb.cpus ?? null, agent: sb.agent ?? false, authVolume: sb.authVolume ?? DEFAULT_AUTH_VOLUME }
+      ? { image: sb.image, env: sb.env ?? [], gateNetwork: sb.gateNetwork ?? false, memory: sb.memory ?? null, cpus: sb.cpus ?? null, agent: sb.agent ?? false, authVolume: sb.authVolume ?? VENDORS[runner]!.sandbox.defaultAuthVolume }
       : null,
     reviewers,
     notify: {

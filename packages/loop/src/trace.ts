@@ -1,83 +1,29 @@
 import * as fs from 'node:fs';
+import { newTraceState, type TraceState } from './trace-format.js';
+import { VENDORS } from './vendors/index.js';
 
-/** State carried across trace lines: model call count and the reply being streamed. */
-export interface TraceState {
-  calls: number;
-  text: string;
-}
+export { toolTarget, type TraceState } from './trace-format.js';
 
-const PARAM_KEYS = ['CommandLine', 'command', 'Path', 'AbsolutePath', 'TargetFile', 'path', 'file_path', 'Query', 'query', 'Url', 'url'];
-
-function short(s: string, n = 100): string {
-  const one = s.replace(/\s+/g, ' ').trim();
-  return one.length > n ? `${one.slice(0, n - 3)}...` : one;
-}
-
-/** The one parameter that says what a tool call was about: the command, the file, or the query. */
-export function toolTarget(parameters: unknown): string {
-  let p: unknown = parameters;
-  if (typeof parameters === 'string') {
-    try {
-      p = JSON.parse(parameters);
-    } catch {
-      return short(parameters);
-    }
-  }
-  if (!p || typeof p !== 'object') return '';
-  const obj = p as Record<string, unknown>;
-  for (const k of PARAM_KEYS) if (typeof obj[k] === 'string') return short(obj[k] as string);
-  const first = Object.values(obj).find((v) => typeof v === 'string');
-  return typeof first === 'string' ? short(first) : '';
-}
-
-function n(v: unknown): string {
-  return typeof v === 'number' ? v.toLocaleString('en-US') : '0';
-}
-
-/** Turns one stream-json event into a readable line, or null for events not worth showing. */
+/**
+ * Turns one trace line into readable text, or null for lines not worth
+ * showing. Each vendor's events have their own shape, so the first vendor
+ * that recognises the line formats it; a trace file needs no config to read.
+ */
 export function formatTraceEvent(line: string, state: TraceState): string | null {
-  let e: Record<string, unknown>;
-  try {
-    e = JSON.parse(line) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-  if (e['event'] === 'init') {
-    const i = (e['init'] ?? {}) as Record<string, unknown>;
-    return `session start: model ${String(i['model'] ?? '?')}, permission mode ${String(i['permission_mode'] ?? '?')}`;
-  }
-  if (e['event'] === 'result') {
-    const r = (e['result'] ?? {}) as Record<string, unknown>;
-    const early = typeof r['finished_reason'] === 'string' ? `, stopped early: ${r['finished_reason']}` : '';
-    return `session end: ${String(r['status'] ?? '?')} after ${Number(r['duration_seconds'] ?? 0).toFixed(0)} s, ${state.calls} model call(s)${early}`;
-  }
-  const s = e['step_update'] as Record<string, unknown> | undefined;
-  if (!s) return null;
-  const type = s['step_type'];
-  const done = s['state'] === 'DONE';
-  if (type === 'tool') {
-    const info = (s['tool_info'] ?? {}) as Record<string, unknown>;
-    const name = String(s['tool_name'] ?? info['name'] ?? 'tool');
-    const target = toolTarget(info['parameters']);
-    if (!done) return `  > ${name}${target ? ` ${target}` : ''}`;
-    const out = typeof info['output'] === 'string' ? short(info['output'].split('\n').find((l) => l.trim()) ?? '', 80) : '';
-    return `    ${name} done in ${Number(s['duration_seconds'] ?? 0).toFixed(1)} s${out ? `: ${out}` : ''}`;
-  }
-  if (type === 'agent_response') {
-    if (typeof s['text_delta'] === 'string') state.text += s['text_delta'];
-    if (!done) return null;
-    state.calls++;
-    const u = (s['usage'] ?? {}) as Record<string, unknown>;
-    const said = state.text.trim() ? `: "${short(state.text, 90)}"` : '';
-    state.text = '';
-    return `model call ${state.calls} (${n(u['input_tokens'])} in, ${n(u['cache_read_tokens'])} cached, ${n(u['output_tokens'])} out, ${Number(s['duration_seconds'] ?? 0).toFixed(1)} s)${said}`;
+  for (const v of Object.values(VENDORS)) {
+    const out = v.formatTraceEvent(line, state);
+    if (out !== null) return out;
   }
   return null;
 }
 
+function isEndEvent(line: string): boolean {
+  return Object.values(VENDORS).some((v) => v.isEndEvent(line));
+}
+
 /** Prints a whole trace, or follows it while the session writes it, until the session ends. */
 export async function printTrace(file: string, follow: boolean, write: (line: string) => void): Promise<void> {
-  const state: TraceState = { calls: 0, text: '' };
+  const state = newTraceState();
   let offset = 0;
   let partial = '';
   const drain = (): boolean => {
@@ -95,7 +41,7 @@ export async function printTrace(file: string, follow: boolean, write: (line: st
     for (const l of lines) {
       const out = formatTraceEvent(l, state);
       if (out) write(out);
-      if (l.includes('"event":"result"') || l.includes('"event": "result"')) ended = true;
+      if (isEndEvent(l)) ended = true;
     }
     return ended;
   };

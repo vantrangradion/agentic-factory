@@ -24,3 +24,8 @@ export * from './interrupt.js';
 export * from './sandbox.js';
 export * from './agent-sandbox.js';
 export * from './chat-notify.js';
+export * from './vendor.js';
+export { VENDORS, vendorFor, antigravity, claudeCode } from './vendors/index.js';
+export { parseClaudeStream, formatClaudeEvent, claudeArgs } from './vendors/claude-code.js';
+export { formatAntigravityEvent } from './vendors/antigravity.js';
+export { newTraceState } from './trace-format.js';

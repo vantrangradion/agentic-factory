@@ -6,6 +6,7 @@ import { resolveAgentConfig, type ResolvedAgentConfig } from './config.js';
 import { readRecords } from './ledger.js';
 import { renderBudgetReport } from './render.js';
 import { loginCommands } from './agent-sandbox.js';
+import { vendorFor } from './vendors/index.js';
 import { spawnSync } from 'node:child_process';
 import { createLocalDeps, watch } from './local.js';
 import { runIssue } from './run-issue.js';
@@ -93,11 +94,12 @@ switch (command) {
   case 'login': {
     const config = loadConfig(cwd);
     if (!config.sandbox?.agent) fail('login is only needed with "sandbox": { "image": "...", "agent": true } in the agent section of .factoryrc.json.');
-    console.log(`Signing agy in inside ${config.sandbox.image}. The login is saved to the Docker volume "${config.sandbox.authVolume}"; your own agy login is not used or changed.`);
-    console.log('Open the URL it prints, sign in, then paste the code back here. This uses one model request.\n');
-    for (const dockerArgs of loginCommands(config.sandbox)) {
+    const vendor = vendorFor(config.runner);
+    console.log(`Signing ${vendor.label} in inside ${config.sandbox.image}. The login is saved to the Docker volume "${config.sandbox.authVolume}"; your own ${vendor.label} login is not used or changed.`);
+    console.log(`${vendor.sandbox.signInHint}\n`);
+    for (const dockerArgs of loginCommands(config.sandbox, undefined, vendor)) {
       const res = spawnSync('docker', dockerArgs, { stdio: 'inherit' });
-      if (res.status !== 0) fail(`docker exited with code ${res.status ?? res.signal}. Is Docker running, and does the image have agy?`);
+      if (res.status !== 0) fail(`docker exited with code ${res.status ?? res.signal}. Is Docker running, and does the image have ${vendor.binary}?`);
     }
     console.log(`\nPASS: agent login saved to volume ${config.sandbox.authVolume}`);
     break;

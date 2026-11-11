@@ -16,7 +16,8 @@
     "agent-loop",
     "tdd",
     "harness-engineering",
-    "gemini-cli"
+    "gemini-cli",
+    "claude-code"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

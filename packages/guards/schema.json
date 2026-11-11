@@ -226,9 +226,10 @@
         "runner": {
           "type": "string",
           "enum": [
-            "antigravity-cli"
+            "antigravity-cli",
+            "claude-code"
           ],
-          "description": "Agent backend. Only antigravity-cli (agy) is implemented."
+          "description": "Agent CLI: antigravity-cli (agy, Gemini models, the default) or claude-code (claude, Claude models). Model ids in model, routes, review.model and budget.pricing must belong to this runner's vendor."
         },
         "model": {
           "type": "string",
@@ -491,8 +492,8 @@
             "gateNetwork": { "type": "boolean", "description": "Give gates network access. Default false." },
             "memory": { "type": "string", "description": "Docker memory limit, e.g. \"4g\"." },
             "cpus": { "type": "number", "exclusiveMinimum": 0, "description": "Docker CPU limit, e.g. 2." },
-            "agent": { "type": "boolean", "description": "Run each agent session in a container from image (which must have agy installed) instead of on the host. Default false. Sign in once per machine with agentic-loop login." },
-            "authVolume": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]+$", "description": "Docker volume holding the agent's login. Default agentic-loop-agy-auth." }
+            "agent": { "type": "boolean", "description": "Run each agent session in a container from image (which must have the runner's CLI installed: agy or claude) instead of on the host. Default false. Sign in once per machine with agentic-loop login." },
+            "authVolume": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]+$", "description": "Docker volume holding the agent's login. Default agentic-loop-agy-auth for agy, agentic-loop-claude-auth for Claude Code." }
           }
         }
       }

@@ -13,6 +13,7 @@ import { runLoop } from './loop.js';
 import { watchOnce, type RunIssueDeps } from './run-issue.js';
 import { checkAgentSandbox, DockerAgentRunner } from './agent-sandbox.js';
 import { createRunner, type AgentCliOptions, type AgentRunner } from './runner.js';
+import { vendorFor } from './vendors/index.js';
 import { agentEnv } from './safe-env.js';
 import { assertDockerAvailable, createDockerGateRunner, type GateRunner } from './sandbox.js';
 import { restoreGitDir, type GitDirSnapshot } from './git-safety.js';
@@ -126,18 +127,20 @@ export function createLocalDeps(opts: LocalOptions): RunIssueDeps {
 }
 
 /**
- * Makes agent runners for one run: in Docker when `sandbox.agent` is on,
- * after checking that the image has agy and the login volume holds a login;
- * on the host otherwise.
+ * Makes agent runners for one run, for the vendor in `runner`: in Docker when
+ * `sandbox.agent` is on, after checking that the image has the agent CLI and
+ * the login volume holds a login; on the host otherwise.
  */
 export function agentRunnerFactory(config: ResolvedAgentConfig, base: Omit<AgentCliOptions, 'model'>, log: (m: string) => void): (model: string) => AgentRunner {
   const sb = config.sandbox;
   if (!sb?.agent) return (model) => createRunner(config.runner, { ...base, model });
+  const vendor = vendorFor(config.runner);
   assertDockerAvailable();
-  const agentVersion = checkAgentSandbox(sb);
-  log(`Agent sessions run in Docker (${sb.image}, agy ${agentVersion}) with network, signed in from volume ${sb.authVolume}`);
+  const agentVersion = checkAgentSandbox(sb, undefined, undefined, vendor);
+  log(`Agent sessions run in Docker (${sb.image}, ${vendor.binary} ${agentVersion}) with network, signed in from volume ${sb.authVolume}`);
   return (model) =>
     new DockerAgentRunner({
+      vendor,
       model,
       timeoutMs: base.timeoutMs,
       sandbox: sb,
