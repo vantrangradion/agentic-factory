@@ -6,6 +6,7 @@ import { loadFactoryConfig } from '@agentic-factory/guards';
 import { modelFor, resolveAgentConfig, type ResolvedAgentConfig } from './config.js';
 import { makeShellExecutor } from './gates.js';
 import { createGitOps } from './git.js';
+import { createWorkspaceNotifier, WORKSPACE_TOKEN_VAR } from './chat-notify.js';
 import { createGhOps, repoInfo } from './github.js';
 import { createGitLedgerStore } from './ledger-store.js';
 import { runLoop } from './loop.js';
@@ -65,6 +66,10 @@ export function createLocalDeps(opts: LocalOptions): RunIssueDeps {
   const env = agentEnv(process.env, path.join(workRoot, 'agent-env'));
   const exec = makeShellExecutor(env);
   const labelConfig = loadAgentConfig(opts.cwd);
+  const workspaceToken = process.env[WORKSPACE_TOKEN_VAR];
+  if (labelConfig.notify.workspace && !workspaceToken) {
+    opts.log(`WARN: notify.workspace is set but ${WORKSPACE_TOKEN_VAR} is not, so nothing is posted to Workspace`);
+  }
 
   return {
     gh,
@@ -116,6 +121,7 @@ export function createLocalDeps(opts: LocalOptions): RunIssueDeps {
     },
     now: () => new Date(),
     log: opts.log,
+    ...(workspaceToken ? { notify: createWorkspaceNotifier(workspaceToken) } : {}),
   };
 }
 

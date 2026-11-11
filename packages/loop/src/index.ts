@@ -23,3 +23,4 @@ export * from './git-safety.js';
 export * from './interrupt.js';
 export * from './sandbox.js';
 export * from './agent-sandbox.js';
+export * from './chat-notify.js';

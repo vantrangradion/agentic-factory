@@ -69,6 +69,8 @@ export interface GitHubOps {
   editPrLabels(pr: number, add: readonly string[], remove: readonly string[]): void;
   createPr(opts: { base: string; branch: string; title: string; bodyFile: string; draft: boolean }): string;
   updatePr(pr: PullRequestRef, opts: { title: string; bodyFile: string; draft: boolean }): void;
+  /** Asks people to review a pull request. GitHub notifies them, unlike a comment posted as themselves. */
+  requestReview(pr: number, logins: readonly string[]): void;
   /** People's reviews and comments on a pull request, oldest first, as plain text; with `since` (ISO time), only newer ones. */
   prFeedback(pr: PullRequestRef, since?: string): string;
   /** A pull request's description. */
@@ -189,6 +191,9 @@ export function createGhOps(repo: string): GitHubOps {
       gh(['pr', 'create', ...R, '--base', base, '--head', branch, '--title', title, '--body-file', bodyFile, ...(draft ? ['--draft'] : [])]),
     prFeedback: (pr, since) => trustedFeedback(JSON.parse(gh(['pr', 'view', String(pr.number), ...R, '--json', 'reviews,comments'])) as RawFeedback, since),
     prBody: (pr) => (JSON.parse(gh(['pr', 'view', String(pr.number), ...R, '--json', 'body'])) as { body?: string }).body ?? '',
+    requestReview: (pr, logins) => {
+      if (logins.length > 0) gh(['pr', 'edit', String(pr), ...R, '--add-reviewer', logins.join(',')]);
+    },
     updatePr: (pr, { title, bodyFile, draft }) => {
       gh(['pr', 'edit', String(pr.number), ...R, '--title', title, '--body-file', bodyFile]);
       if (draft && !pr.isDraft) gh(['pr', 'ready', String(pr.number), ...R, '--undo']);
