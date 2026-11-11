@@ -1,6 +1,6 @@
 {
   "name": "@agentic-factory/guards",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Deterministic, language-agnostic architectural guardrails for the Factory Model",
   "license": "MIT",
   "repository": {
