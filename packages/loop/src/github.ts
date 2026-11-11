@@ -27,12 +27,18 @@ export interface RawFeedback {
   comments?: { author?: { login?: string }; authorAssociation?: string; body?: string; createdAt?: string }[];
 }
 
-/** Plan feedback from trusted people only, oldest first. Untrusted comments are dropped, not quoted. */
-export function trustedFeedback(raw: RawFeedback): string {
+/**
+ * Feedback from trusted people only, oldest first. Untrusted comments are
+ * dropped, not quoted. With `since`, only feedback from that moment on.
+ */
+export function trustedFeedback(raw: RawFeedback, since?: string): string {
+  const after = since ? Date.parse(since) : NaN;
   const items = [
     ...(raw.reviews ?? []).map((r) => ({ at: r.submittedAt ?? '', who: r.author?.login ?? 'someone', assoc: r.authorAssociation, body: r.body ?? '', kind: `review, ${r.state ?? ''}` })),
     ...(raw.comments ?? []).map((c) => ({ at: c.createdAt ?? '', who: c.author?.login ?? 'someone', assoc: c.authorAssociation, body: c.body ?? '', kind: '' })),
-  ].filter((i) => i.body.trim() && i.assoc !== undefined && TRUSTED_ASSOCIATIONS.has(i.assoc));
+  ]
+    .filter((i) => i.body.trim() && i.assoc !== undefined && TRUSTED_ASSOCIATIONS.has(i.assoc))
+    .filter((i) => Number.isNaN(after) || Date.parse(i.at) >= after);
   return items
     .sort((a, b) => a.at.localeCompare(b.at))
     .map((i) => `- ${i.who}${i.kind ? ` (${i.kind})` : ''}: ${i.body}`)
@@ -63,8 +69,10 @@ export interface GitHubOps {
   editPrLabels(pr: number, add: readonly string[], remove: readonly string[]): void;
   createPr(opts: { base: string; branch: string; title: string; bodyFile: string; draft: boolean }): string;
   updatePr(pr: PullRequestRef, opts: { title: string; bodyFile: string; draft: boolean }): void;
-  /** People's reviews and comments on a pull request, oldest first, as plain text. */
-  prFeedback(pr: PullRequestRef): string;
+  /** People's reviews and comments on a pull request, oldest first, as plain text; with `since` (ISO time), only newer ones. */
+  prFeedback(pr: PullRequestRef, since?: string): string;
+  /** A pull request's description. */
+  prBody(pr: PullRequestRef): string;
 }
 
 /** The REST API's issue shape (`gh api repos/<repo>/issues/<n>`), which includes the author's association. */
@@ -179,7 +187,8 @@ export function createGhOps(repo: string): GitHubOps {
     },
     createPr: ({ base, branch, title, bodyFile, draft }) =>
       gh(['pr', 'create', ...R, '--base', base, '--head', branch, '--title', title, '--body-file', bodyFile, ...(draft ? ['--draft'] : [])]),
-    prFeedback: (pr) => trustedFeedback(JSON.parse(gh(['pr', 'view', String(pr.number), ...R, '--json', 'reviews,comments'])) as RawFeedback),
+    prFeedback: (pr, since) => trustedFeedback(JSON.parse(gh(['pr', 'view', String(pr.number), ...R, '--json', 'reviews,comments'])) as RawFeedback, since),
+    prBody: (pr) => (JSON.parse(gh(['pr', 'view', String(pr.number), ...R, '--json', 'body'])) as { body?: string }).body ?? '',
     updatePr: (pr, { title, bodyFile, draft }) => {
       gh(['pr', 'edit', String(pr.number), ...R, '--title', title, '--body-file', bodyFile]);
       if (draft && !pr.isDraft) gh(['pr', 'ready', String(pr.number), ...R, '--undo']);

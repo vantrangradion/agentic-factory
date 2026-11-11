@@ -21,7 +21,7 @@ import { defaultUser, dockerCli, type DockerCli } from './sandbox.js';
 const AUTH_TOKEN_FILE = 'antigravity-oauth-token';
 const AUTH_MOUNT = '/auth';
 const HOME = '/home/agent';
-const WORK = '/work';
+export const AGENT_WORK_DIR = '/work';
 const KILL_TIMEOUT_MS = 30 * 1000;
 const CHECK_TIMEOUT_MS = 2 * 60 * 1000;
 /** Exit code of the startup check when the volume holds no login. */
@@ -92,10 +92,10 @@ export class DockerAgentRunner implements AgentRunner {
     const host = path.resolve(cwd);
     return [
       ...baseRunArgs(containerName, sandbox, this.opts.user ?? defaultUser(), { network: true }),
-      '--volume', `${host}:${WORK}`,
-      '--volume', `${path.join(host, '.git')}:${WORK}/.git:ro`,
+      '--volume', `${host}:${AGENT_WORK_DIR}`,
+      '--volume', `${path.join(host, '.git')}:${AGENT_WORK_DIR}/.git:ro`,
       '--volume', `${sandbox.authVolume}:${AUTH_MOUNT}:ro`,
-      '--workdir', WORK,
+      '--workdir', AGENT_WORK_DIR,
       sandbox.image,
       'bash', '-c', START_SCRIPT, 'agentic-loop-agent',
       'agy', ...agyArgs(promptArg, this.opts.model, seconds),
@@ -107,7 +107,7 @@ export class DockerAgentRunner implements AgentRunner {
     const spawn = this.opts.spawn ?? dockerSpawn;
     const docker = this.opts.docker ?? dockerCli;
     const name = `agentic-loop-agent-${randomBytes(6).toString('hex')}`;
-    const args = this.dockerArgs(promptArgument(prompt, cwd, WORK), cwd, name);
+    const args = this.dockerArgs(promptArgument(prompt, cwd, AGENT_WORK_DIR), cwd, name);
     const { traceFile, fd } = openTrace(this.opts.logDir, this.opts.onSessionStart);
     let exit: SessionExit;
     try {

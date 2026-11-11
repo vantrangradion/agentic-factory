@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import type { ResolvedGate, ResolvedSandbox } from './config.js';
 import { runGates, tail, type CommandOutcome, type GateResult } from './gates.js';
 import { noteChildExit } from './interrupt.js';
+import { localPathsToRelative } from './paths.js';
 
 /**
  * Runs a gate ladder. The default runs each gate on the host in the working
@@ -17,6 +18,8 @@ export const SANDBOX_SETUP = 'sandbox setup';
 
 const SETUP_TIMEOUT_MS = 20 * 60 * 1000;
 const KILL_TIMEOUT_MS = 30 * 1000;
+/** Where gate containers see the staged copy. */
+const WORK_DIR = '/work';
 
 /** Runs `docker` with the given arguments. Injected so tests never need Docker. */
 export type DockerCli = (args: string[], timeoutMs: number) => CommandOutcome;
@@ -107,8 +110,8 @@ export function createDockerGateRunner(opts: DockerGateRunnerOptions): GateRunne
       ...(sandbox.memory ? ['--memory', sandbox.memory] : []),
       ...(sandbox.cpus ? ['--cpus', String(sandbox.cpus)] : []),
       ...(user ? ['--user', user] : []),
-      '--volume', `${path.resolve(opts.stagingDir)}:/work`,
-      '--workdir', '/work',
+      '--volume', `${path.resolve(opts.stagingDir)}:${WORK_DIR}`,
+      '--workdir', WORK_DIR,
       '--env', 'HOME=/tmp',
       '--env', 'CI=true',
       ...passEnv,
@@ -140,7 +143,9 @@ export function createDockerGateRunner(opts: DockerGateRunnerOptions): GateRunne
         return results;
       }
     }
-    return [...results, ...runGates(gates, opts.stagingDir, (command, _cwd, timeoutMs) => run(command, sandbox.gateNetwork, timeoutMs))];
+    const ran = runGates(gates, opts.stagingDir, (command, _cwd, timeoutMs) => run(command, sandbox.gateNetwork, timeoutMs));
+    // Gates print paths inside the container and in the staging copy; neither means anything on GitHub.
+    return [...results, ...ran.map((r) => ({ ...r, outputTail: localPathsToRelative(r.outputTail, [WORK_DIR, path.resolve(opts.stagingDir)]) }))];
   };
 }
 

@@ -3,9 +3,12 @@ import * as path from 'node:path';
 import { wantsReview, type ResolvedAgentConfig, type ResolvedGate } from './config.js';
 import { firstFailure, runGates, type CommandExecutor, type GateResult } from './gates.js';
 import type { GitOps } from './git.js';
+import { AGENT_WORK_DIR } from './agent-sandbox.js';
 import { matchesAny } from './glob.js';
 import type { Issue } from './issue.js';
 import { costUsd, type AttemptRecord, type PhaseRecord, type ReviewRecord, type RunRecord, type Stage } from './ledger.js';
+import { localPathsToRelative } from './paths.js';
+import { unplannedFiles } from './plan.js';
 import { buildPrompt, type Phase } from './prompt.js';
 import { buildReviewPrompt, describeFindings, isActionable, parseFindings, type Finding } from './review.js';
 import { addUsage, ZERO_USAGE, type AgentRunner, type AgentRunResult, type TokenUsage } from './runner.js';
@@ -39,6 +42,10 @@ export interface LoopOptions {
   lockedTests?: string[];
   /** For "plan": a person's comments on a rejected earlier plan. */
   planFeedback?: string;
+  /** For "build": the plan a person approved, from the plan pull request. */
+  approvedPlan?: string;
+  /** For "build": people's comments on the pull request since its last commit, which the build must address. */
+  buildFeedback?: string;
   /** Commit the review diff starts from. Default: HEAD when the run starts. */
   diffBase?: string;
 }
@@ -65,6 +72,8 @@ export interface LoopResult {
   plan?: string;
   /** Tests fixed by the red phase (or the approved plan). */
   lockedTests?: string[];
+  /** Non-test files the build changed that the plan does not mention. Advisory: shown to reviewers, never reverted. */
+  unplannedFiles?: string[];
   review?: ReviewOutcome;
   /** The red gate run that proved the tests failed first. */
   redRun?: GateResult;
@@ -83,24 +92,6 @@ function subject(prefix: string, title: string, issue: number): string {
   const room = SUBJECT_MAX - prefix.length - suffix.length;
   const t = title.length > room ? `${title.slice(0, Math.max(0, room - 3)).trimEnd()}...` : title;
   return `${prefix}${t}${suffix}`;
-}
-
-/**
- * Agents link files with absolute local URLs (file:///home/.../repo/src/a.ts#L1).
- * Those leak the machine's paths into public pull requests and do not resolve
- * on GitHub, so they become repository-relative code spans.
- */
-export function localPathsToRelative(text: string, cwd: string): string {
-  const root = cwd.replace(/\/$/, '');
-  const rel = (target: string): string => target.replace(/^file:\/\//, '').split(root + '/').join('').replace(/#.*$/, '');
-  return text
-    .replace(/\[([^\]]+)\]\((file:\/\/[^)\s]+)\)/g, (_m, label: string, target: string) => {
-      const file = rel(target);
-      const name = label.replace(/^`|`$/g, '');
-      return name === file || file.endsWith(`/${name}`) ? `\`${file}\`` : `${label} (\`${file}\`)`;
-    })
-    .split(`file://${root}/`).join('')
-    .split(`${root}/`).join('');
 }
 
 /** True when a package.json's "scripts" differ from the version at `ref`: changing them could stop the locked tests from running. */
@@ -136,7 +127,10 @@ export function runLoop(
 ): LoopResult {
   if (opts.stage !== 'full' && !config.tdd.enabled) throw new Error(`Stage "${opts.stage}" needs tdd.enabled`);
   const { runner, git, exec, cwd, log } = deps;
-  const ladder = (gates: readonly ResolvedGate[]): GateResult[] => (deps.runGates ? deps.runGates(gates, cwd) : runGates(gates, cwd, exec));
+  // Paths the agent and the gates print: the clone on the host, and the clone inside the agent's container.
+  const localRoots = [cwd, ...(config.sandbox?.agent ? [AGENT_WORK_DIR] : [])];
+  const ladder = (gates: readonly ResolvedGate[]): GateResult[] =>
+    (deps.runGates ? deps.runGates(gates, cwd) : runGates(gates, cwd, exec)).map((g) => ({ ...g, outputTail: localPathsToRelative(g.outputTail, localRoots) }));
   const startedAt = deps.now().toISOString();
   const isBug = issue.labels.some((l) => config.budget.bugLabels.includes(l));
   const branch = `${config.branchPrefix}issue-${issue.number}`;
@@ -155,7 +149,8 @@ export function runLoop(
   let finalGates: GateResult[] = [];
   let lockedTests: string[] = opts.stage === 'build' ? [...(opts.lockedTests ?? [])] : [];
   let stopReason: string | undefined;
-  let plan: string | undefined;
+  let plan: string | undefined = opts.stage === 'build' ? opts.approvedPlan : undefined;
+  let unplanned: string[] = [];
   let review: ReviewOutcome | undefined;
 
   const session = (phase: Phase, attempt: number, feedback: string | undefined): AgentRunResult => {
@@ -169,9 +164,11 @@ export function runLoop(
       ...(feedback !== undefined ? { feedback } : {}),
       ...(phase === 'green' ? { lockedTests } : {}),
       ...(phase === 'red' && opts.planFeedback ? { planFeedback: opts.planFeedback } : {}),
+      ...(phase === 'green' && opts.stage === 'build' && opts.approvedPlan ? { approvedPlan: opts.approvedPlan } : {}),
+      ...(phase === 'green' && opts.buildFeedback ? { buildFeedback: opts.buildFeedback } : {}),
     });
     const raw = runner.run(prompt, cwd);
-    const res = { ...raw, response: localPathsToRelative(raw.response, cwd) };
+    const res = { ...raw, response: localPathsToRelative(raw.response, localRoots) };
     usage = addUsage(usage, res.usage);
     deps.onUsage?.('builder', runner.model, usage);
     log(`[${phase}] agent finished: exit ${res.exitCode}, ${res.usage.total} tokens${res.error ? `, error: ${res.error}` : ''}`);
@@ -364,6 +361,14 @@ export function runLoop(
       log(`[${phaseName}] all gates pass; committed`);
     }
     if (!phase.passed && !stopReason) stopReason = `Gates still failing after ${config.maxAttempts} attempts.`;
+    // Compare what was built with what was approved, so a reviewer sees every unplanned file.
+    if (phase.passed && opts.stage === 'build' && plan) {
+      unplanned = unplannedFiles(plan, git.filesChangedSince(diffBase), config.tdd.testFiles);
+      if (unplanned.length > 0) {
+        caughtBy.push('plan-drift');
+        log(`[${phaseName}] ${unplanned.length} changed file(s) not in the approved plan: ${unplanned.join(', ')}`);
+      }
+    }
   }
 
   // Independent review, by exception. Advisory: it can add one fix round but never fails the run.
@@ -373,7 +378,7 @@ export function runLoop(
     const headBefore = git.head();
     log(`[review] starting independent review with ${reviewer.model}`);
     const rawReview = reviewer.run(buildReviewPrompt({ issue, diff: git.diff(diffBase), gates: finalGates, claims: summary, contextFiles }), cwd);
-    const res = { ...rawReview, response: localPathsToRelative(rawReview.response, cwd) };
+    const res = { ...rawReview, response: localPathsToRelative(rawReview.response, localRoots) };
     deps.onUsage?.('reviewer', reviewer.model, res.usage);
     if (git.head() !== headBefore) git.resetSoft(headBefore);
     const touched = git.changedFiles(headBefore);
@@ -451,6 +456,7 @@ export function runLoop(
     caughtBy,
     firstPass: passed && phases.filter((p) => p.phase !== 'fix').every((p) => p.attempts.length === 1),
     stage: opts.stage,
+    ...(unplanned.length > 0 ? { unplannedFiles: unplanned } : {}),
     ...(reviewRecord ? { review: reviewRecord } : {}),
   };
 
@@ -463,6 +469,7 @@ export function runLoop(
     summary,
     ...(plan !== undefined ? { plan } : {}),
     ...(lockedTests.length > 0 ? { lockedTests } : {}),
+    ...(unplanned.length > 0 ? { unplannedFiles: unplanned } : {}),
     ...(review ? { review } : {}),
     ...(redRun ? { redRun } : {}),
     finalGates,

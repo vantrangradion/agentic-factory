@@ -42,6 +42,13 @@ export interface ExportFacts {
   wildcardTargets: string[];
 }
 
+export interface KeyFacts {
+  /** Property names this file reads (`a.key`, `a['key']`, `const { key } = a`), except method calls. */
+  reads: { key: string; line: number; col: number }[];
+  /** Property names this file sets or declares: object literal keys, type and class members, enum members. */
+  keys: string[];
+}
+
 export interface LanguageAdapter {
   /** Stable id used in `.factoryrc.json` `project.languages`. */
   id: string;
@@ -65,6 +72,9 @@ export interface LanguageAdapter {
   /** Heuristic: does this comment line look like disabled source code? */
   looksLikeCode(commentLine: string): boolean;
   extractStrings(file: string, content: string): StringRef[];
+
+  /** Optional: languages without it are skipped by the test-only-keys guard. */
+  analyzeKeys?(file: string, content: string): KeyFacts;
 
   /** Optional: languages without it are skipped by the dead-exports guard. */
   analyzeExports?(

@@ -7,6 +7,7 @@ import { checkSecrets } from './secret-scan.js';
 import { checkTodoIssueLinks } from './todo-issue-links.js';
 import { checkCommentedCode } from './commented-code.js';
 import { checkDeadExports } from './dead-exports.js';
+import { checkTestOnlyKeys } from './test-only-keys.js';
 import { formatGitHubAnnotation } from './github-annotations.js';
 import { initFactoryConfig } from './init.js';
 import { getAdapters } from './languages/index.js';
@@ -41,7 +42,8 @@ if (isHelp) {
   console.log(`  secrets         Scan for leaked API keys, tokens, or customer PII`);
   console.log(`  todos           Enforce issue tracker links on all TODO/FIXME comments`);
   console.log(`  commented-code  Detect and reject commented-out code blocks`);
-  console.log(`  dead-exports    Scan and report unused/dead exports\n`);
+  console.log(`  dead-exports    Scan and report unused/dead exports`);
+  console.log(`  test-only-keys  Find production reads of keys that only tests set (opt-in)\n`);
   console.log(`Options:`);
   console.log(`  --github        Emit GitHub Actions ::error:: annotations`);
   console.log(`  --force         Overwrite existing files when running init`);
@@ -59,6 +61,7 @@ const VALID_COMMANDS = new Set([
   'todos',
   'commented-code',
   'dead-exports',
+  'test-only-keys',
 ]);
 
 if (!VALID_COMMANDS.has(command)) {
@@ -204,6 +207,22 @@ if (command === 'run' || command === 'dead-exports') {
     console.error(result.summary);
     result.violations.forEach((v) => {
       const msg = `Unused/dead export '${v.symbol}'`;
+      console.error(`   ${v.file}:${v.line}:${v.col} ${msg}`);
+      reportError(v.file, v.line, v.col, msg);
+    });
+  } else {
+    console.log(result.summary);
+  }
+  result.notes.forEach((note) => console.log(`NOTE: ${note}`));
+}
+
+if (command === 'run' || command === 'test-only-keys') {
+  const result = checkTestOnlyKeys(projectRoot, config.guards?.testOnlyKeys, adapters);
+  if (result.hasViolations) {
+    hasAnyFailure = true;
+    console.error(result.summary);
+    result.violations.forEach((v) => {
+      const msg = `Reads '${v.key}', which only tests set: nothing in the product writes it, so the real app never takes this path. Set it in production code or config, or add it to guards.testOnlyKeys.ignoreKeys if a library provides it.`;
       console.error(`   ${v.file}:${v.line}:${v.col} ${msg}`);
       reportError(v.file, v.line, v.col, msg);
     });

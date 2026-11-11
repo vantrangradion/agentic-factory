@@ -42,10 +42,24 @@ export function prepareWorkspace(opts: {
   const baseTip = git(dir, env, 'rev-parse', 'HEAD');
   let diffBase = baseTip;
   let changedFiles: string[] = [];
+  let branchUpdatedAt: string | undefined;
   if (opts.checkout) {
     log(`Checking out ${opts.checkout}`);
     git(dir, env, 'fetch', '--quiet', remoteUrl, `refs/heads/${opts.checkout}`);
     git(dir, env, 'switch', '--quiet', '-C', opts.checkout, 'FETCH_HEAD');
+    // Read before the rebase, which rewrites commit times.
+    branchUpdatedAt = new Date(git(dir, env, 'log', '-1', '--format=%cI')).toISOString();
+    // Build on the current default branch, so a plan approved before other work merged does not conflict later.
+    if (git(dir, env, 'merge-base', baseTip, 'HEAD') !== baseTip) {
+      log(`Rebasing ${opts.checkout} onto ${branch}`);
+      try {
+        git(dir, env, 'rebase', '--quiet', baseTip);
+      } catch {
+        const conflicts = git(dir, env, 'diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean);
+        git(dir, env, 'rebase', '--abort');
+        return { diffBase: baseTip, changedFiles: [], branchUpdatedAt, rebaseConflicts: conflicts.length > 0 ? conflicts : ['(git did not name the files)'], snapshot: snapshotGitDir(dir) };
+      }
+    }
     diffBase = git(dir, env, 'merge-base', baseTip, 'HEAD');
     changedFiles = git(dir, env, 'diff', '--name-only', '--no-renames', diffBase, 'HEAD', '--').split('\n').filter(Boolean);
   }
@@ -57,7 +71,7 @@ export function prepareWorkspace(opts: {
     if (out.exitCode !== 0) throw new Error(`Setup command failed (${setup}), exit ${out.exitCode}:\n${out.output.split('\n').slice(-30).join('\n')}`);
   }
   restoreGitDir(snapshot);
-  return { diffBase, changedFiles, snapshot };
+  return { diffBase, changedFiles, ...(branchUpdatedAt ? { branchUpdatedAt } : {}), snapshot };
 }
 
 /**

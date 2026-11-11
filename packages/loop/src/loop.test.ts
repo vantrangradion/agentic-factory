@@ -330,6 +330,68 @@ describe('stages', () => {
     expect(result.record.caughtBy).toEqual(['locked-tests']);
     expect(agent.prompts[0]).toContain('make the tests pass (green)');
   });
+
+  const approveRed = () => {
+    writeTests(repo);
+    git(repo, 'add', '--all');
+    git(repo, 'commit', '--quiet', '-m', 'test: approved red');
+  };
+
+  it('build stage follows the approved plan and the new review comments, and keeps the plan for the PR', () => {
+    approveRed();
+    const agent = new ScriptedAgent([implement]);
+    const plan = 'Approach: write the feature file\nFiles to change: src/feature.txt';
+    const result = loop(agent, config(), { stage: 'build', lockedTests: ['tests/feature.test.txt'], approvedPlan: plan, buildFeedback: '- tam: say done, not finished' });
+
+    expect(result.passed).toBe(true);
+    expect(result.plan).toBe(plan);
+    expect(result.unplannedFiles).toBeUndefined();
+    expect(result.record.caughtBy).toEqual([]);
+    expect(agent.prompts[0]).toContain('## The approved plan');
+    expect(agent.prompts[0]).toContain('Files to change: src/feature.txt');
+    expect(agent.prompts[0]).toContain('## Review comments to address');
+    expect(agent.prompts[0]).toContain('say done, not finished');
+    expect(agent.prompts[0]).toContain('never overturns a recorded decision');
+  });
+
+  it('flags files the build changed that the approved plan does not name, without reverting them', () => {
+    // Seen in a real run: the approved plan kept a table read-only; the build added a column and a migration, and nothing noticed.
+    approveRed();
+    const agent = new ScriptedAgent([
+      (cwd) => {
+        implement(cwd);
+        write(cwd, 'src/migrations/002-updated-at.sql', 'alter table outbox add updated_at;\n');
+      },
+    ]);
+    const result = loop(agent, config(), { stage: 'build', lockedTests: ['tests/feature.test.txt'], approvedPlan: 'Files to change: src/feature.txt' });
+
+    expect(result.passed).toBe(true);
+    expect(result.unplannedFiles).toEqual(['src/migrations/002-updated-at.sql']);
+    expect(result.record.unplannedFiles).toEqual(['src/migrations/002-updated-at.sql']);
+    expect(result.record.caughtBy).toEqual(['plan-drift']);
+    expect(fs.existsSync(path.join(repo, 'src/migrations/002-updated-at.sql'))).toBe(true);
+  });
+
+  it('does not show the plan or check drift in a build without an approved plan', () => {
+    approveRed();
+    const agent = new ScriptedAgent([implement]);
+    const result = loop(agent, config(), { stage: 'build', lockedTests: ['tests/feature.test.txt'] });
+    expect(result.plan).toBeUndefined();
+    expect(agent.prompts[0]).not.toContain('## The approved plan');
+    expect(agent.prompts[0]).not.toContain('## Review comments to address');
+  });
+});
+
+describe('gate output', () => {
+  it('rewrites the clone\'s absolute paths before they reach the agent and the PR', () => {
+    const cfg = config({ gates: [{ name: 'test', run: 'echo "FAIL $PWD/src/feature.ts:3"; exit 1' }], tdd: { enabled: false }, plan: { approval: 'none' }, maxAttempts: 1 });
+    const result = loop(new ScriptedAgent([implement]), cfg);
+
+    expect(result.passed).toBe(false);
+    const tailText = result.finalGates[0]?.outputTail ?? '';
+    expect(tailText).toContain('FAIL src/feature.ts:3');
+    expect(tailText).not.toContain(fs.realpathSync(repo));
+  });
 });
 
 describe('independent review', () => {

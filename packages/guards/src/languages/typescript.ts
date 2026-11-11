@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type * as TS from 'typescript';
 import { loadTypeScript } from './ts-loader.js';
-import { CommentRef, ExportFacts, ImportRef, LanguageAdapter, StringRef } from './types.js';
+import { CommentRef, ExportFacts, ImportRef, KeyFacts, LanguageAdapter, StringRef } from './types.js';
 
 const SOURCE_FILE = /\.(ts|tsx|js|jsx)$/;
 const TEST_FILE = /\.(test|spec)\.(ts|tsx|js|jsx)$/;
@@ -141,6 +141,55 @@ export const typescriptAdapter: LanguageAdapter = {
 
     visit(sf);
     return strings;
+  },
+
+  analyzeKeys(file, content): KeyFacts {
+    const { ts, sf } = parse(file, content);
+    const facts: KeyFacts = { reads: [], keys: [] };
+    const nameText = (n: TS.Node | undefined): string | null =>
+      n && (ts.isIdentifier(n) || ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isPrivateIdentifier(n)) ? n.text : null;
+    const read = (key: string, at: TS.Node) => {
+      const { line, character } = sf.getLineAndCharacterOfPosition(at.getStart());
+      facts.reads.push({ key, line: line + 1, col: character + 1 });
+    };
+    const isCallee = (node: TS.Node) => ts.isCallExpression(node.parent) && node.parent.expression === node;
+
+    function visit(node: TS.Node) {
+      if (ts.isPropertyAccessExpression(node) && !isCallee(node)) {
+        read(node.name.text, node.name);
+      } else if (ts.isElementAccessExpression(node) && ts.isStringLiteral(node.argumentExpression) && !isCallee(node)) {
+        read(node.argumentExpression.text, node.argumentExpression);
+      } else if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) {
+        const key = nameText(node.propertyName) ?? nameText(node.name);
+        if (key) read(key, node);
+      } else if (
+        ts.isPropertyAssignment(node) ||
+        ts.isShorthandPropertyAssignment(node) ||
+        ts.isPropertySignature(node) ||
+        ts.isPropertyDeclaration(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isMethodSignature(node) ||
+        ts.isGetAccessorDeclaration(node) ||
+        ts.isSetAccessorDeclaration(node) ||
+        ts.isEnumMember(node)
+      ) {
+        const key = nameText(node.name);
+        if (key) facts.keys.push(key);
+      } else if (ts.isParameter(node) && ts.canHaveModifiers(node) && (ts.getModifiers(node)?.length ?? 0) > 0) {
+        // Constructor parameter properties: constructor(private readonly key: T).
+        const key = nameText(node.name);
+        if (key) facts.keys.push(key);
+      } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+        // Assignments set a key: target.key = value, target['key'] = value.
+        const left = node.left;
+        if (ts.isPropertyAccessExpression(left)) facts.keys.push(left.name.text);
+        else if (ts.isElementAccessExpression(left) && ts.isStringLiteral(left.argumentExpression)) facts.keys.push(left.argumentExpression.text);
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sf);
+    return facts;
   },
 
   analyzeExports(file, content, isEntry, resolve): ExportFacts {

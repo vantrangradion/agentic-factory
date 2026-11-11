@@ -6,6 +6,7 @@ export * from './glob.js';
 export * from './issue.js';
 export * from './ledger.js';
 export * from './loop.js';
+export * from './paths.js';
 export * from './prompt.js';
 export * from './render.js';
 export * from './runner.js';
