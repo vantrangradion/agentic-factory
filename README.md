@@ -130,7 +130,7 @@ jobs:
 
 ---
 
-### 5. Run the Agent Loop on GitHub
+### 5. Run the Agent Loop
 
 Label an issue `agent:ready` and the loop writes failing tests and a plan; approve the plan and it implements it, with no human edits in between:
 
@@ -173,7 +173,7 @@ Label an issue `agent:ready` and the loop writes failing tests and a plan; appro
 ```
 Set `pricing` to your models' real prices (or one price object for all models). Routes are fixed in config and checked in order; the agent never picks its own model. Every run records its model, and the report compares models by cost per run, since tokens are not comparable across models. `pnpm exec agentic-loop check-config` validates the section and lists every problem at once.
 
-**Step 2a: Run it on your own machine (no CI credentials needed).** Uses your `gh` login and your agent login (`agy`), so a seat-based plan works:
+**Step 2: Run it on your machine.** Uses your `gh` login and your agent login (`agy`), so a seat-based plan works:
 ```bash
 pnpm exec agentic-loop run-issue 42          # one issue, now
 pnpm exec agentic-loop watch                 # poll every 60 s for ready issues assigned to you
@@ -194,49 +194,11 @@ pnpm exec agentic-loop watch --take-unassigned
   RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git && rm -rf /var/lib/apt/lists/*
   RUN curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- --dir /usr/local/bin
   ```
-  Sign in once per machine with `pnpm exec agentic-loop login`. It opens a sign-in URL, you paste the code back, and only the login token is saved to the volume `agentic-loop-agy-auth` (set `sandbox.authVolume` to use another). Your own agy login on the host is not used. Before each run the loop checks the image has agy and the volume has a login, and the run record names the agy version. The installer cannot pin a version, so rebuild the image on purpose to upgrade. Plugins and settings from your host agy are not available in the container; put what the agent needs in `context`. Not supported in GitHub Actions yet.
+  Sign in once per machine with `pnpm exec agentic-loop login`. It opens a sign-in URL, you paste the code back, and only the login token is saved to the volume `agentic-loop-agy-auth` (set `sandbox.authVolume` to use another). Your own agy login on the host is not used. Before each run the loop checks the image has agy and the volume has a login, and the run record names the agy version. The installer cannot pin a version, so rebuild the image on purpose to upgrade. Plugins and settings from your host agy are not available in the container; put what the agent needs in `context`. 
 * **Known gaps:** without `sandbox`, gates run in the working folder, so an ignored file could make them pass; without `sandbox.agent`, the agent session runs as you and can reach Docker; with it, the agent has open network and can read its own login token, so it could still send repository contents out; helpers that tests import are not locked; run one watcher per GitHub login.
 * **Ctrl+C** stops before the next attempt and still reports on the issue; press it twice to quit at once.
 
-**Step 2b: Or run it in GitHub Actions (needs an API key or Vertex AI credentials).**
-```yaml
-# .github/workflows/agent-loop.yml
-name: Agent Loop
-on:
-  issues:
-    types: [labeled]
-  workflow_dispatch:
-    inputs:
-      issue:
-        description: Issue number
-        required: true
-        type: number
-
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  id-token: write
-
-jobs:
-  loop:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'agent:ready'
-    uses: vantrangradion/agentic-factory/.github/workflows/reusable-agent-loop.yml@<tag>
-    with:
-      issue-number: ${{ github.event.issue.number || inputs.issue }}
-      agy-install-command: '<pinned agy install command>'
-    secrets:
-      gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
-      github-token: ${{ secrets.FACTORY_GH_TOKEN }}
-```
-
-* **`github-token`:** use a GitHub App token or fine-grained PAT. Pull requests opened with the default `GITHUB_TOKEN` do not trigger your CI.
-* **ADC instead of an API key:** set `use-adc: true` with `gcp-project-id`, `gcp-workload-identity-provider` and `gcp-service-account`. The workflow then sets `AGY_ADC_AUTH=true` and `GOOGLE_CLOUD_QUOTA_PROJECT`.
-* **Plan approval in CI:** not supported yet. The `run` command refuses `plan.approval: "required"`; use local mode, or `"none"` for CI.
-* **Experimental:** the agent shares the runner with later steps. `sandbox` moves setup and gates into containers, but the agent session still runs on the runner: `sandbox.agent` works in local mode only, and `run` refuses it.
-* **Not yet run in CI:** the `agy` steps follow the Antigravity docs but have not been tested on a GitHub runner, and ADC with a service account (rather than a person's login) is not confirmed by the docs.
-* **Who can start it:** only people who can add labels (triage access or above).
-* **What the agent can reach:** the repository checkout and the model credentials. It never receives a GitHub token, and `.factoryrc.json` and `.github/**` are always protected.
+**Where it runs:** on a teammate's machine, never in GitHub Actions. The loop needs the agent login, and with a seat-based plan that is one person's login, which should not leave their machine. GitHub only runs the project's own checks on the pull request (guards, build, tests; see section 4), which need no model access and check the agent's work again on a clean runner.
 
 ---
 

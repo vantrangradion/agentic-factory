@@ -2,20 +2,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadFactoryConfig } from '@agentic-factory/guards';
-import { decideBudget } from './budget.js';
-import { modelFor, resolveAgentConfig, type ResolvedAgentConfig } from './config.js';
-import { makeShellExecutor } from './gates.js';
-import { restoreGitDir, snapshotGitDir } from './git-safety.js';
-import { agentEnv } from './safe-env.js';
-import { createGitOps } from './git.js';
-import { parseIssue } from './issue.js';
-import { readRecords, writeRecord } from './ledger.js';
-import { runLoop } from './loop.js';
-import { renderBudgetReport, renderFailureComment, renderPrBody } from './render.js';
-import { createRunner } from './runner.js';
+import { resolveAgentConfig, type ResolvedAgentConfig } from './config.js';
+import { readRecords } from './ledger.js';
+import { renderBudgetReport } from './render.js';
 import { loginCommands } from './agent-sandbox.js';
 import { spawnSync } from 'node:child_process';
-import { createLocalDeps, sandboxDeps, watch } from './local.js';
+import { createLocalDeps, watch } from './local.js';
 import { runIssue } from './run-issue.js';
 import { printTrace } from './trace.js';
 import { wasInterrupted } from './interrupt.js';
@@ -25,14 +17,10 @@ Usage: agentic-loop <command> [options]
 
 Commands:
   check-config                 Validate the "agent" section of .factoryrc.json
-  budget --ledger <dir> [--labels a,b]
-                               Decide whether an issue may run under the weekly budget
-  run --issue-file <file> [--out-dir <dir>]
-                               Run the red and green phases for one issue
   report --ledger <dir> [--out <file>]
                                Render the budget and metrics page from the ledger
 
-Local mode (uses your own gh login and agent login on this machine).
+The loop runs on your machine with your own gh login and agent login.
 --base clones that branch and targets PRs at it instead of the default branch:
   run-issue <number> [--base <branch>] [--repo owner/name] [--work-dir <dir>]
                                Claim one issue, run it in a fresh clean clone, push, open the PR
@@ -42,8 +30,6 @@ Local mode (uses your own gh login and agent login on this machine).
   login                        Sign the agent in inside Docker, once per machine (needs sandbox.agent)
 
   trace <file> [--follow]      Show an agent session trace as readable lines; --follow while it runs
-
-Outputs go to stdout, and to $GITHUB_OUTPUT when it is set.
 `;
 
 const args = process.argv.slice(2);
@@ -63,19 +49,6 @@ function requireFlag(name: string): string {
 function fail(message: string): never {
   console.error(`\nFAILED: ${message}\n`);
   process.exit(1);
-}
-
-function setOutput(values: Record<string, string>): void {
-  const file = process.env['GITHUB_OUTPUT'];
-  if (!file) return;
-  for (const [k, v] of Object.entries(values)) {
-    if (v.includes('\n')) {
-      const delim = `EOF_${Math.random().toString(36).slice(2)}`;
-      fs.appendFileSync(file, `${k}<<${delim}\n${v}\n${delim}\n`);
-    } else {
-      fs.appendFileSync(file, `${k}=${v}\n`);
-    }
-  }
 }
 
 function loadConfig(cwd: string): ResolvedAgentConfig {
@@ -98,69 +71,6 @@ switch (command) {
     const config = loadConfig(cwd);
     console.log(JSON.stringify(config, null, 2));
     console.log('\nPASS: agent config is valid');
-    setOutput({ 'ready-label': config.labels.ready, 'working-label': config.labels.working, 'pr-open-label': config.labels.prOpen, 'needs-human-label': config.labels.needsHuman });
-    break;
-  }
-
-  case 'budget': {
-    const config = loadConfig(cwd);
-    const { records, skipped } = readRecords(requireFlag('--ledger'));
-    if (skipped.length > 0) console.warn(`WARN: skipped unreadable ledger files: ${skipped.join(', ')}`);
-    const labels = (flag('--labels') ?? '').split(',').map((l) => l.trim()).filter(Boolean);
-    const decision = decideBudget(records, config.budget, labels, new Date());
-    console.log(`${decision.allowed ? 'PASS' : 'STOP'}: ${decision.reason}`);
-    setOutput({ allowed: String(decision.allowed), mode: decision.mode, reason: decision.reason, 'spent-usd': String(decision.spentUsd) });
-    break;
-  }
-
-  case 'run': {
-    const config = loadConfig(cwd);
-    const issue = parseIssue(JSON.parse(fs.readFileSync(requireFlag('--issue-file'), 'utf-8')));
-    const outDir = path.resolve(flag('--out-dir') ?? '.agentic-loop');
-    fs.mkdirSync(outDir, { recursive: true });
-
-    const contextFiles = config.context.filter((f) => {
-      const ok = fs.existsSync(path.join(cwd, f));
-      if (!ok) console.warn(`WARN: context file not found, skipping: ${f}`);
-      return ok;
-    });
-
-    if (config.sandbox?.agent) {
-      fail('sandbox.agent is on, which the GitHub Actions workflow does not support yet: the container signs in from a login volume on your machine. Use local mode (run-issue or watch), or turn sandbox.agent off for CI.');
-    }
-    if (config.plan.approval === 'required') {
-      fail('plan.approval is "required", which the GitHub Actions workflow does not support yet. Use local mode (run-issue or watch), or set plan.approval to "none" for CI.');
-    }
-    const model = modelFor(issue.labels, config);
-    console.log(`Runner: ${config.runner}. Model: ${model}${model === config.model ? ' (default)' : ' (routed by label)'}`);
-
-    // CI: the agent and its gates must not see the runner's file commands or tokens; git must not run anything from .git.
-    const env = agentEnv(process.env, path.join(outDir, 'agent-env'));
-    const snapshot = snapshotGitDir(cwd);
-    const gitOps = createGitOps(cwd, { beforeCommand: () => restoreGitDir(snapshot) });
-    const result = runLoop(issue, config, contextFiles, {
-      runner: createRunner(config.runner, { model, timeoutMs: config.sessionTimeoutMs, env, logDir: path.join(outDir, 'sessions'), ...(process.env['AGENTIC_LOOP_AGENT_BIN'] ? { binary: process.env['AGENTIC_LOOP_AGENT_BIN'] } : {}) }),
-      git: gitOps,
-      exec: makeShellExecutor(env),
-      ...sandboxDeps(config, { listFiles: () => gitOps.filesToCommit(), workRoot: outDir, env, log: (m) => console.log(m) }),
-      cwd,
-      now: () => new Date(),
-      log: (m) => console.log(m),
-    }, { stage: 'full' });
-
-    const recordFile = writeRecord(path.join(outDir, 'records'), result.record);
-    const bodyFile = path.join(outDir, result.passed ? 'pr-body.md' : 'failure.md');
-    fs.writeFileSync(bodyFile, result.passed ? renderPrBody(issue, result) : renderFailureComment(issue, result, config));
-
-    console.log(`\n${result.passed ? 'PASS' : 'NEEDS HUMAN'}: ${result.passed ? `branch ${result.branch} is ready for a pull request` : result.stopReason}`);
-    setOutput({
-      passed: String(result.passed),
-      branch: result.branch,
-      'has-commits': String(result.commits.length > 0),
-      'pr-title': result.prTitle,
-      'body-file': bodyFile,
-      'record-file': recordFile,
-    });
     break;
   }
 
