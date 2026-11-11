@@ -186,6 +186,17 @@
               }
             }
           }
+        },
+        "testOnlyKeys": {
+          "type": "object",
+          "description": "Opt-in. Fails when production code reads a property that only tests set.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "rootDir": { "type": "string" },
+            "exclude": { "type": "array", "items": { "type": "string" } },
+            "testPaths": { "type": "array", "items": { "type": "string" }, "description": "Path fragments that mark test code, beyond *.test.* and *.spec.* files." },
+            "ignoreKeys": { "type": "array", "items": { "type": "string" }, "description": "Keys never reported, e.g. fields of a library's types that tests fake." }
+          }
         }
       }
     },

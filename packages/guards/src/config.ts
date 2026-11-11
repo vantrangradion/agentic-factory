@@ -42,6 +42,16 @@ export interface CommentedCodeConfig {
   exclude?: string[];
 }
 
+export interface TestOnlyKeysConfig {
+  enabled?: boolean;
+  rootDir?: string;
+  exclude?: string[];
+  /** Path fragments that mark test code beyond the language's test file names. */
+  testPaths?: string[];
+  /** Keys never reported, e.g. fields of a library's types that tests fake. */
+  ignoreKeys?: string[];
+}
+
 export interface DeadExportsConfig {
   enabled?: boolean;
   rootDir?: string;
@@ -186,6 +196,7 @@ export interface FactoryConfig {
     todoIssueLinks?: TodoIssueConfig;
     commentedCode?: CommentedCodeConfig;
     deadExports?: DeadExportsConfig;
+    testOnlyKeys?: TestOnlyKeysConfig;
   };
   testing?: {
     targetCoverage?: number;

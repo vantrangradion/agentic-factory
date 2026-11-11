@@ -6,6 +6,7 @@ export * from './secret-scan.js';
 export * from './todo-issue-links.js';
 export * from './commented-code.js';
 export * from './dead-exports.js';
+export * from './test-only-keys.js';
 export * from './github-annotations.js';
 export * from './init.js';
 
