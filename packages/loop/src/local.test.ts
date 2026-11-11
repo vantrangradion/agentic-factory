@@ -528,6 +528,28 @@ describe('notifying people', () => {
     expect(logs.join('\n')).toContain('WARN could not request review from huy, bela');
   });
 
+  it('posts plan, pass and needs-a-person events to chat, and survives a failed post', () => {
+    const events: string[] = [];
+    const logs: string[] = [];
+    for (const [result, cfg] of [
+      [{ ...loopResult(5, true, ['red']), stage: 'plan' as const, plan: 'Approach' }, people({ plan: { approval: 'required' } })],
+      [loopResult(5, true, ['abc']), people()],
+      [loopResult(5, false, ['red']), people()],
+    ] as const) {
+      const gh = new FakeGitHub('dylan');
+      gh.add({ number: 5, labels: ['agent:ready'], assignees: ['dylan'] });
+      const { d } = deps(gh, { cfg, result });
+      d.notify = (_c, e) => {
+        events.push(`${e.kind} ${e.prUrl ?? ''}`.trim());
+        throw new Error('chat is down');
+      };
+      d.log = (m) => logs.push(m);
+      runIssue(5, cfg, d, { takeUnassigned: false, explicit: false });
+    }
+    expect(events).toEqual(['plan-ready https://example.com/pull/100', 'passed https://example.com/pull/100', 'needs-human https://example.com/pull/100']);
+    expect(logs.filter((l) => l.includes('WARN could not post to chat: chat is down'))).toHaveLength(3);
+  });
+
   it('requests nothing and mentions nobody without reviewers', () => {
     const gh = new FakeGitHub('dylan');
     gh.add({ number: 5, labels: ['agent:ready'], assignees: ['dylan'] });
@@ -751,7 +773,8 @@ describe('workspace and ledger with real git', () => {
 
 describe('agentEnv', () => {
   it('removes credentials and blocks git and gh from using the user login', () => {
-    const env = agentEnv({ PATH: process.env['PATH'], HOME: process.env['HOME'], GH_TOKEN: 'secret', GITHUB_TOKEN: 'secret', SSH_AUTH_SOCK: '/tmp/agent' }, path.join(tmp, 'env'));
+    const env = agentEnv({ PATH: process.env['PATH'], HOME: process.env['HOME'], GH_TOKEN: 'secret', GITHUB_TOKEN: 'secret', SSH_AUTH_SOCK: '/tmp/agent', AGENTIC_LOOP_WORKSPACE_TOKEN: 'secret' }, path.join(tmp, 'env'));
+    expect(env['AGENTIC_LOOP_WORKSPACE_TOKEN']).toBeUndefined();
 
     expect(env['GH_TOKEN']).toBeUndefined();
     expect(env['GITHUB_TOKEN']).toBeUndefined();

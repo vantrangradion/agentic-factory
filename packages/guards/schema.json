@@ -455,6 +455,31 @@
             "pr": { "type": "array", "items": { "type": "string" }, "description": "Asked to review pull requests whose gates pass." }
           }
         },
+        "notify": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Also post to a chat channel. Tokens come from the environment, never from this file.",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel"],
+              "description": "Gradion Workspace. Token: AGENTIC_LOOP_WORKSPACE_TOKEN, with Write access to this channel.",
+              "properties": {
+                "url": { "type": "string", "description": "Default https://workspace.gradion.com" },
+                "channel": { "type": "string", "description": "Channel id from the channel's address, e.g. G-6jh00udb." },
+                "cc": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "plan": { "type": "string", "description": "Text added for plans and runs that need a person, e.g. @dylan." },
+                    "pr": { "type": "string", "description": "Text added for pull requests whose gates pass." }
+                  }
+                }
+              }
+            }
+          }
+        },
         "sandbox": {
           "type": "object",
           "additionalProperties": false,

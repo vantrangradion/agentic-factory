@@ -186,6 +186,23 @@ export interface AgentConfig {
     /** Asked to review pull requests whose gates pass. */
     pr?: string[];
   };
+  /** Also post to a chat channel. The token comes from the environment, never from this file. */
+  notify?: {
+    /** Gradion Workspace. Token: AGENTIC_LOOP_WORKSPACE_TOKEN, with Write access to this channel. */
+    workspace?: {
+      /** Default "https://workspace.gradion.com". */
+      url?: string;
+      /** Channel id, as in the channel's address, e.g. "G-6jh00udb". */
+      channel: string;
+      /** Text added to the message so people are notified, e.g. "@dylan". */
+      cc?: {
+        /** For plans and runs that need a person. */
+        plan?: string;
+        /** For pull requests whose gates pass. */
+        pr?: string;
+      };
+    };
+  };
   budget?: AgentBudgetConfig;
 }
 

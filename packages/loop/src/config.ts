@@ -62,6 +62,7 @@ export interface ResolvedAgentConfig {
   sandbox: ResolvedSandbox | null;
   /** GitHub logins, without "@". */
   reviewers: { plan: string[]; pr: string[] };
+  notify: { workspace: { url: string; channel: string; cc: { plan: string; pr: string } } | null };
   budget: {
     weeklyUsd: number | null;
     bugOnlyAt: number;
@@ -207,6 +208,15 @@ export function resolveAgentConfig(raw: AgentConfig | undefined): ResolvedAgentC
     reviewers[key] = [...new Set((list as string[]).map((l) => l.replace(/^@/, '')))];
   }
 
+  const ws = cfg.notify?.workspace;
+  if (ws !== undefined) {
+    if (!ws || typeof ws.channel !== 'string' || !/^[A-Za-z0-9_-]+$/.test(ws.channel)) problems.push('notify.workspace.channel must be a channel id, e.g. "G-6jh00udb"');
+    if (ws?.url !== undefined && !/^https:\/\/[^\s/]+$/.test(ws.url)) problems.push('notify.workspace.url must look like "https://workspace.gradion.com"');
+    for (const k of ['plan', 'pr'] as const) {
+      if (ws?.cc?.[k] !== undefined && typeof ws.cc[k] !== 'string') problems.push(`notify.workspace.cc.${k} must be text`);
+    }
+  }
+
   if (problems.length > 0) throw new AgentConfigError(problems);
 
   return {
@@ -236,6 +246,9 @@ export function resolveAgentConfig(raw: AgentConfig | undefined): ResolvedAgentC
       ? { image: sb.image, env: sb.env ?? [], gateNetwork: sb.gateNetwork ?? false, memory: sb.memory ?? null, cpus: sb.cpus ?? null, agent: sb.agent ?? false, authVolume: sb.authVolume ?? DEFAULT_AUTH_VOLUME }
       : null,
     reviewers,
+    notify: {
+      workspace: ws ? { url: ws.url ?? 'https://workspace.gradion.com', channel: ws.channel, cc: { plan: ws.cc?.plan ?? '', pr: ws.cc?.pr ?? '' } } : null,
+    },
     budget: {
       weeklyUsd: b.weeklyUsd ?? null,
       bugOnlyAt,

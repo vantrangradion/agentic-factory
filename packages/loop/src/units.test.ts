@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { decideBudget, weekLabel, weekStart } from './budget.js';
 import { AgentConfigError, modelFor, resolveAgentConfig, wantsReview } from './config.js';
+import { createWorkspaceNotifier, notifyText, type HttpPost } from './chat-notify.js';
 import { parseFindings } from './review.js';
 import { runGates, tail, type CommandExecutor } from './gates.js';
 import { matchesAny } from './glob.js';
@@ -50,6 +51,14 @@ describe('resolveAgentConfig', () => {
     expect(resolveAgentConfig(base).reviewers).toEqual({ plan: [], pr: [] });
     expect(resolveAgentConfig({ ...base, reviewers: { plan: ['@dylan', 'dylan'], pr: ['huy-le'] } }).reviewers).toEqual({ plan: ['dylan'], pr: ['huy-le'] });
     expect(() => resolveAgentConfig({ ...base, reviewers: { pr: ['not a login'] } })).toThrow('reviewers.pr must be a list of GitHub logins');
+  });
+
+  it('reads a Workspace channel with a default address and rejects a bad one', () => {
+    expect(resolveAgentConfig(base).notify.workspace).toBeNull();
+    expect(resolveAgentConfig({ ...base, notify: { workspace: { channel: 'G-6jh00udb', cc: { plan: '@dylan' } } } }).notify.workspace).toEqual({
+      url: 'https://workspace.gradion.com', channel: 'G-6jh00udb', cc: { plan: '@dylan', pr: '' },
+    });
+    expect(() => resolveAgentConfig({ ...base, notify: { workspace: { channel: '../x', url: 'http://plain' } } })).toThrow(/channel must be a channel id[\s\S]*url must look like/);
   });
 
   it('lists every problem at once', () => {
@@ -435,5 +444,45 @@ describe('prompt rules for plans and reviewer comments', () => {
     const p = buildPrompt({ issue, phase: 'red', config: cfg, contextFiles: ['AGENTS.md'], attempt: 1, planFeedback: '- dylan: drop the memory limits' });
     expect(p).toContain('A reviewer comment never overturns a recorded decision');
     expect(p).toContain('follow the files, not the comment');
+  });
+});
+
+describe('Workspace notifications', () => {
+  const cfg = (cc = { plan: '@dylan', pr: '@huy @bela' }) =>
+    resolveAgentConfig({ model: 'm', gates: [{ name: 'test', run: 'true' }], notify: { workspace: { channel: 'G-6jh00udb', cc } } });
+  const issue = { number: 42, title: 'Show sync status', url: 'https://github.com/o/r/issues/42' };
+
+  it('says what happened with links only, never code or gate output', () => {
+    expect(notifyText({ kind: 'plan-ready', issue, prUrl: 'https://github.com/o/r/pull/7' }, '@dylan')).toBe(
+      'Plan ready for review: #42 Show sync status\nhttps://github.com/o/r/pull/7\n@dylan',
+    );
+    expect(notifyText({ kind: 'needs-human', issue, prUrl: 'https://github.com/o/r/pull/7' }, '')).toBe(
+      'The agent loop stopped and needs a person: #42 Show sync status\nhttps://github.com/o/r/issues/42',
+    );
+  });
+
+  it('posts to the channel with the token and tags the right people', () => {
+    const calls: { url: string; token: string; body: Record<string, unknown> }[] = [];
+    const post: HttpPost = (url, token, body) => {
+      calls.push({ url, token, body: JSON.parse(body) as Record<string, unknown> });
+      return { status: 201, body: '{}' };
+    };
+    const notify = createWorkspaceNotifier('tok', post);
+    notify(cfg(), { kind: 'passed', issue, prUrl: 'https://github.com/o/r/pull/7' });
+    notify(cfg(), { kind: 'plan-ready', issue });
+
+    expect(calls[0]?.url).toBe('https://workspace.gradion.com/api/channels/G-6jh00udb/messages');
+    expect(calls[0]?.token).toBe('tok');
+    expect(calls[0]?.body['content']).toContain('@huy @bela');
+    expect(calls[0]?.body['client_message_id']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(calls[1]?.body['content']).toContain('@dylan');
+  });
+
+  it('fails loudly on a refused post and does nothing without a channel', () => {
+    const refused: HttpPost = () => ({ status: 403, body: '{"error":"scope_action_not_allowed"}' });
+    expect(() => createWorkspaceNotifier('tok', refused)(cfg(), { kind: 'passed', issue })).toThrow('Workspace answered 403');
+    let posted = false;
+    createWorkspaceNotifier('tok', () => ((posted = true), { status: 201, body: '' }))(resolveAgentConfig({ model: 'm', gates: [{ name: 'test', run: 'true' }] }), { kind: 'passed', issue });
+    expect(posted).toBe(false);
   });
 });

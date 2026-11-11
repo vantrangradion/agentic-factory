@@ -12,6 +12,7 @@ import type { LedgerStore } from './ledger-store.js';
 import type { LoopDeps, LoopOptions, LoopResult } from './loop.js';
 import { addUsage, ZERO_USAGE, type TokenUsage } from './runner.js';
 import { renderFailureComment, renderPlanPrBody, renderPrBody } from './render.js';
+import type { Notify, NotifyEvent } from './chat-notify.js';
 
 export type RunIssueOutcome = 'skipped' | 'over-budget' | 'plan-ready' | 'passed' | 'needs-human' | 'crashed';
 
@@ -51,6 +52,8 @@ export interface RunIssueDeps {
   push: (dir: string, branch: string) => void;
   now: () => Date;
   log: (m: string) => void;
+  /** Posts to a chat channel. Omitted: GitHub only. */
+  notify?: Notify;
   /** Wait before confirming a claim on an issue this watcher assigned itself to. Default 3 s. */
   claimSettleMs?: number;
 }
@@ -165,10 +168,20 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
   log(`#${n}: claimed by ${deps.me} for the ${stage} stage. ${budget.reason}`);
 
   // The clean clone's config replaces this once it is loaded.
-  let people = labelConfig.reviewers;
-  const needsHuman = (text: string): void => {
+  let current = labelConfig;
+  // Like review requests, a failed chat post never fails the run.
+  const tell = (kind: NotifyEvent['kind'], prUrl?: string): void => {
+    if (!deps.notify) return;
+    try {
+      deps.notify(current, { kind, issue: { number: n, title: issue.title, url: issue.url }, ...(prUrl ? { prUrl } : {}) });
+    } catch (err) {
+      log(`#${n}: WARN could not post to chat: ${(err as Error).message}`);
+    }
+  };
+  const needsHuman = (text: string, prUrl?: string): void => {
     gh.editLabels(n, [L.needsHuman], [L.working]);
-    gh.comment(n, writeFile(outDir, 'comment.md', text + ccLine(others(people.plan, deps.me))));
+    gh.comment(n, writeFile(outDir, 'comment.md', text + ccLine(others(current.reviewers.plan, deps.me))));
+    tell('needs-human', prUrl);
   };
   // A failed notification never fails the run: the labels and comments already say what happened.
   const requestReview = (url: string | undefined, logins: readonly string[]): void => {
@@ -201,7 +214,7 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
       return { outcome: 'needs-human', reason: 'the plan branch conflicts with the default branch', stage };
     }
     const config = deps.loadConfig(dir);
-    people = config.reviewers;
+    current = config;
     const loopOpts: LoopOptions = { stage, diffBase: ws.diffBase };
     if (stage === 'build' && existingPr) {
       loopOpts.lockedTests = ws.changedFiles.filter((f) => matchesAny(f, config.tdd.testFiles));
@@ -247,16 +260,18 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
       gh.editLabels(n, [config.labels.planReview], [L.working]);
       requestReview(prUrl, config.reviewers.plan);
       gh.comment(n, writeFile(outDir, 'comment.md', `A plan and failing tests are ready for review: ${prUrl ?? 'no pull request'}\n\nAdd \`${config.labels.planApproved}\` to build it, or comment on the pull request and add \`${config.labels.ready}\` to re-plan.\n${ccLine(others(config.reviewers.plan, deps.me))}`));
+      tell('plan-ready', prUrl);
       log(`#${n}: PLAN READY ${prUrl ?? ''}`);
       return { outcome: 'plan-ready', reason: 'waiting for plan approval', stage, ...(prUrl ? { prUrl } : {}) };
     }
     if (result.passed) {
       gh.editLabels(n, [config.labels.prOpen], [L.working]);
       requestReview(prUrl, config.reviewers.pr);
+      tell('passed', prUrl);
       log(`#${n}: PASS ${prUrl ?? ''}`);
       return { outcome: 'passed', reason: 'all gates pass', stage, ...(prUrl ? { prUrl } : {}) };
     }
-    needsHuman(`${body}\nPull request: ${prUrl ?? 'none (no commits)'}\n`);
+    needsHuman(`${body}\nPull request: ${prUrl ?? 'none (no commits)'}\n`, prUrl);
     log(`#${n}: NEEDS HUMAN ${prUrl ?? ''}`);
     return { outcome: 'needs-human', reason: result.stopReason ?? 'the run did not pass', stage, ...(prUrl ? { prUrl } : {}) };
   } catch (err) {
