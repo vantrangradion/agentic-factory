@@ -57,7 +57,7 @@ export interface AgentGate {
   timeoutMs?: number;
 }
 
-/** Runs setup and gates in Docker instead of on the host. The agent session itself still runs on the host. */
+/** Runs setup and gates in Docker instead of on the host, and with `agent: true` the agent session too. */
 export interface AgentSandboxConfig {
   /** Docker image with the project's toolchain (bash, node, pnpm, ...). Gates have no network, so nothing can be fetched at gate time. */
   image: string;
@@ -69,6 +69,14 @@ export interface AgentSandboxConfig {
   memory?: string;
   /** Docker CPU limit, e.g. 2. */
   cpus?: number;
+  /**
+   * Run each agent session in a container from `image` too (which must have
+   * `agy` installed), instead of on the host. Default false. Sign in once per
+   * machine with `agentic-loop login`.
+   */
+  agent?: boolean;
+  /** Docker volume holding the agent's login from `agentic-loop login`. Default "agentic-loop-agy-auth". */
+  authVolume?: string;
 }
 
 export interface AgentBudgetConfig {

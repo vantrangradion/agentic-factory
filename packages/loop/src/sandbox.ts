@@ -144,6 +144,7 @@ export function createDockerGateRunner(opts: DockerGateRunnerOptions): GateRunne
   };
 }
 
-function defaultUser(): string | undefined {
+/** The host user and group as "uid:gid", so files written in a mounted folder stay owned by the user. */
+export function defaultUser(): string | undefined {
   return typeof process.getuid === 'function' && typeof process.getgid === 'function' ? `${process.getuid()}:${process.getgid()}` : undefined;
 }
