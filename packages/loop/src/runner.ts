@@ -183,9 +183,71 @@ export function parseAntigravityJson(stdout: string): { response: string; usage:
 }
 
 /**
- * Runs Antigravity CLI (`agy`) headless with every tool permission
- * auto-approved. The loop, not the agent, decides what is kept: protected
- * paths, locked tests and commits are enforced after each session.
+ * Returns the `-p` argument for a prompt. A prompt too large for one argument
+ * is written to a file inside `.git` (never committed, but readable by the
+ * agent), and the argument points there. `visibleCwd` is where the agent sees
+ * `cwd`: the same folder on the host, or its mount point in a container.
+ */
+export function promptArgument(prompt: string, cwd: string, visibleCwd: string = cwd): string {
+  if (Buffer.byteLength(prompt) <= MAX_ARG_PROMPT_BYTES) return prompt;
+  fs.writeFileSync(path.join(cwd, '.git', TASK_FILE), prompt);
+  const seen = path.posix.join(visibleCwd.split(path.sep).join('/'), '.git', TASK_FILE);
+  return `Your full task is in the file ${seen}. Read all of it first, then carry it out exactly as written there.`;
+}
+
+const TASK_FILE = 'agentic-loop-task.md';
+
+/** The agy arguments for one headless session with every tool permission auto-approved. */
+export function agyArgs(promptArg: string, model: string, seconds: number): string[] {
+  return ['-p', promptArg, '--model', model, '--output-format', 'stream-json', '--dangerously-skip-permissions', '--print-timeout', `${seconds}s`];
+}
+
+/** Creates the trace file for one session and reports its path. The caller closes the descriptor. */
+export function openTrace(logDir: string | undefined, onSessionStart?: (traceFile: string) => void): { traceFile: string; fd: number } {
+  const dir = logDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'agentic-loop-'));
+  fs.mkdirSync(dir, { recursive: true });
+  const traceFile = path.join(dir, `session-${new Date().toISOString().replace(/[:.]/g, '-')}.ndjson`);
+  const fd = fs.openSync(traceFile, 'w');
+  onSessionStart?.(traceFile);
+  return { traceFile, fd };
+}
+
+/** How the session process ended. */
+export interface SessionExit {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  stderr: string;
+  error?: Error;
+}
+
+/** Turns a finished session (its trace and how the process ended) into a result. */
+export function sessionResult(traceFile: string, exit: SessionExit, seconds: number): AgentRunResult {
+  const parsed = parseAntigravityStream(fs.readFileSync(traceFile, 'utf-8'));
+  noteChildExit(exit.status, exit.signal);
+  const base = { exitCode: exit.status, response: parsed.response, usage: parsed.usage, toolCalls: parsed.toolCalls };
+  if (exit.status === 130 || exit.signal === 'SIGINT') {
+    return { ...base, interrupted: true, error: 'Stopped by the user (Ctrl+C)' };
+  }
+  if (exit.error) {
+    const timedOut = (exit.error as NodeJS.ErrnoException).code === 'ETIMEDOUT';
+    return { ...base, error: timedOut ? `Agent session timed out after ${seconds} s` : exit.error.message };
+  }
+  const stderrTail = exit.stderr.trim().split('\n').slice(-20).join('\n');
+  // agy 1.5.0+ exits with code 3 when --print-timeout cuts a turn short.
+  const exitError =
+    exit.status === 3
+      ? `Agent session hit its ${seconds} s time limit. ${stderrTail}`.trim()
+      : exit.status !== 0
+        ? `Agent exited with code ${exit.status}. ${stderrTail}`.trim()
+        : undefined;
+  const error = parsed.error ?? exitError;
+  return { ...base, ...(error !== undefined ? { error } : {}) };
+}
+
+/**
+ * Runs Antigravity CLI (`agy`) headless on the host with every tool
+ * permission auto-approved. The loop, not the agent, decides what is kept:
+ * protected paths, locked tests and commits are enforced after each session.
  */
 export class AntigravityCliRunner implements AgentRunner {
   readonly name = 'antigravity-cli';
@@ -197,27 +259,12 @@ export class AntigravityCliRunner implements AgentRunner {
 
   run(prompt: string, cwd: string): AgentRunResult {
     const seconds = Math.max(1, Math.round(this.opts.timeoutMs / 1000));
-    const dir = this.opts.logDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'agentic-loop-'));
-    fs.mkdirSync(dir, { recursive: true });
-    const traceFile = path.join(dir, `session-${new Date().toISOString().replace(/[:.]/g, '-')}.ndjson`);
-    const fd = fs.openSync(traceFile, 'w');
-    this.opts.onSessionStart?.(traceFile);
-    let promptArg = prompt;
-    if (Buffer.byteLength(prompt) > MAX_ARG_PROMPT_BYTES) {
-      // Inside .git so it is never committed, but still inside the workspace the agent can read.
-      const taskFile = path.join(cwd, '.git', 'agentic-loop-task.md');
-      fs.writeFileSync(taskFile, prompt);
-      promptArg = `Your full task is in the file ${taskFile}. Read all of it first, then carry it out exactly as written there.`;
-    }
+    const { traceFile, fd } = openTrace(this.opts.logDir, this.opts.onSessionStart);
     let res;
     try {
       res = spawnSync(
         'bash',
-        [
-          '-c', PROCESS_GROUP_WRAPPER, 'agentic-loop-agent',
-          this.opts.binary ?? 'agy',
-          '-p', promptArg, '--model', this.opts.model, '--output-format', 'stream-json', '--dangerously-skip-permissions', '--print-timeout', `${seconds}s`,
-        ],
+        ['-c', PROCESS_GROUP_WRAPPER, 'agentic-loop-agent', this.opts.binary ?? 'agy', ...agyArgs(promptArgument(prompt, cwd), this.opts.model, seconds)],
         // stdin is closed: agy waits forever on an open, unused stdin when run as a subprocess.
         // stdout goes straight to the trace file, so it can be followed while the session runs.
         { cwd, env: this.opts.env ?? process.env, stdio: ['ignore', fd, 'pipe'], encoding: 'utf-8', timeout: this.opts.timeoutMs + 60_000, maxBuffer: 64 * 1024 * 1024 },
@@ -225,37 +272,7 @@ export class AntigravityCliRunner implements AgentRunner {
     } finally {
       fs.closeSync(fd);
     }
-    const parsed = parseAntigravityStream(fs.readFileSync(traceFile, 'utf-8'));
-    noteChildExit(res.status, res.signal);
-    if (res.status === 130 || res.signal === 'SIGINT') {
-      return { exitCode: res.status, response: parsed.response, usage: parsed.usage, toolCalls: parsed.toolCalls, interrupted: true, error: 'Stopped by the user (Ctrl+C)' };
-    }
-    if (res.error) {
-      const timedOut = (res.error as NodeJS.ErrnoException).code === 'ETIMEDOUT';
-      return {
-        exitCode: res.status,
-        response: parsed.response,
-        usage: parsed.usage,
-        toolCalls: parsed.toolCalls,
-        error: timedOut ? `Agent session timed out after ${seconds} s` : res.error.message,
-      };
-    }
-    const stderrTail = (res.stderr ?? '').trim().split('\n').slice(-20).join('\n');
-    // agy 1.5.0+ exits with code 3 when --print-timeout cuts a turn short.
-    const exitError =
-      res.status === 3
-        ? `Agent session hit its ${seconds} s time limit. ${stderrTail}`.trim()
-        : res.status !== 0
-          ? `Agent exited with code ${res.status}. ${stderrTail}`.trim()
-          : undefined;
-    const error = parsed.error ?? exitError;
-    return {
-      exitCode: res.status,
-      response: parsed.response,
-      usage: parsed.usage,
-      toolCalls: parsed.toolCalls,
-      ...(error !== undefined ? { error } : {}),
-    };
+    return sessionResult(traceFile, { status: res.status, signal: res.signal, stderr: res.stderr ?? '', ...(res.error ? { error: res.error } : {}) }, seconds);
   }
 }
 

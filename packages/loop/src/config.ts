@@ -24,7 +24,13 @@ export interface ResolvedSandbox {
   gateNetwork: boolean;
   memory: string | null;
   cpus: number | null;
+  /** The agent session runs in a container too. */
+  agent: boolean;
+  /** Docker volume holding the agent's login. */
+  authVolume: string;
 }
+
+export const DEFAULT_AUTH_VOLUME = 'agentic-loop-agy-auth';
 
 export interface ResolvedPricing {
   inputPerMTok: number;
@@ -180,6 +186,10 @@ export function resolveAgentConfig(raw: AgentConfig | undefined): ResolvedAgentC
     }
     if (sb?.memory !== undefined && !/^\d+[bkmg]?$/i.test(String(sb.memory))) problems.push('sandbox.memory must look like "4g"');
     if (sb?.cpus !== undefined && !(typeof sb.cpus === 'number' && sb.cpus > 0)) problems.push('sandbox.cpus must be greater than 0');
+    if (sb?.agent !== undefined && typeof sb.agent !== 'boolean') problems.push('sandbox.agent must be true or false');
+    if (sb?.authVolume !== undefined && !(typeof sb.authVolume === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]+$/.test(sb.authVolume))) {
+      problems.push('sandbox.authVolume must be a Docker volume name, e.g. "agentic-loop-agy-auth"');
+    }
   }
 
   if (problems.length > 0) throw new AgentConfigError(problems);
@@ -208,7 +218,7 @@ export function resolveAgentConfig(raw: AgentConfig | undefined): ResolvedAgentC
     setup: cfg.setup ?? null,
     ledgerBranch: cfg.ledgerBranch ?? 'factory-ledger',
     sandbox: sb
-      ? { image: sb.image, env: sb.env ?? [], gateNetwork: sb.gateNetwork ?? false, memory: sb.memory ?? null, cpus: sb.cpus ?? null }
+      ? { image: sb.image, env: sb.env ?? [], gateNetwork: sb.gateNetwork ?? false, memory: sb.memory ?? null, cpus: sb.cpus ?? null, agent: sb.agent ?? false, authVolume: sb.authVolume ?? DEFAULT_AUTH_VOLUME }
       : null,
     budget: {
       weeklyUsd: b.weeklyUsd ?? null,

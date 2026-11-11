@@ -10,7 +10,8 @@ import { createGhOps, repoInfo } from './github.js';
 import { createGitLedgerStore } from './ledger-store.js';
 import { runLoop } from './loop.js';
 import { watchOnce, type RunIssueDeps } from './run-issue.js';
-import { createRunner } from './runner.js';
+import { checkAgentSandbox, DockerAgentRunner } from './agent-sandbox.js';
+import { createRunner, type AgentCliOptions, type AgentRunner } from './runner.js';
 import { agentEnv } from './safe-env.js';
 import { assertDockerAvailable, createDockerGateRunner, type GateRunner } from './sandbox.js';
 import { restoreGitDir, type GitDirSnapshot } from './git-safety.js';
@@ -95,9 +96,10 @@ export function createLocalDeps(opts: LocalOptions): RunIssueDeps {
         ...(bin ? { binary: bin } : {}),
       };
       const gitOps = createGitOps(dir, { beforeCommand: () => restoreGitDir(trusted(dir)) });
+      const makeRunner = agentRunnerFactory(config, runnerOpts, opts.log);
       return runLoop(issue, config, contextFiles, {
-        runner: createRunner(config.runner, { model, ...runnerOpts }),
-        reviewRunner: createRunner(config.runner, { model: config.review.model ?? model, ...runnerOpts }),
+        runner: makeRunner(model),
+        reviewRunner: makeRunner(config.review.model ?? model),
         git: gitOps,
         exec,
         ...sandboxDeps(config, { listFiles: () => gitOps.filesToCommit(), workRoot, env, log: opts.log }),
@@ -115,6 +117,28 @@ export function createLocalDeps(opts: LocalOptions): RunIssueDeps {
     now: () => new Date(),
     log: opts.log,
   };
+}
+
+/**
+ * Makes agent runners for one run: in Docker when `sandbox.agent` is on,
+ * after checking that the image has agy and the login volume holds a login;
+ * on the host otherwise.
+ */
+export function agentRunnerFactory(config: ResolvedAgentConfig, base: Omit<AgentCliOptions, 'model'>, log: (m: string) => void): (model: string) => AgentRunner {
+  const sb = config.sandbox;
+  if (!sb?.agent) return (model) => createRunner(config.runner, { ...base, model });
+  assertDockerAvailable();
+  const agentVersion = checkAgentSandbox(sb);
+  log(`Agent sessions run in Docker (${sb.image}, agy ${agentVersion}) with network, signed in from volume ${sb.authVolume}`);
+  return (model) =>
+    new DockerAgentRunner({
+      model,
+      timeoutMs: base.timeoutMs,
+      sandbox: sb,
+      agentVersion,
+      ...(base.logDir ? { logDir: base.logDir } : {}),
+      ...(base.onSessionStart ? { onSessionStart: base.onSessionStart } : {}),
+    });
 }
 
 /** The Docker gate runner when `agent.sandbox` is set; nothing otherwise. Fails fast if Docker is not running. */

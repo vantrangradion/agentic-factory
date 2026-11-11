@@ -11,7 +11,7 @@ import type { AgentRunner } from './runner.js';
 import { assertDockerAvailable, createDockerGateRunner, SANDBOX_SETUP, stageFiles, type DockerCli } from './sandbox.js';
 import { shellExecutor } from './gates.js';
 
-const SANDBOX: ResolvedSandbox = { image: 'loop-test:1', env: [], gateNetwork: false, memory: null, cpus: null };
+const SANDBOX: ResolvedSandbox = { image: 'loop-test:1', env: [], gateNetwork: false, memory: null, cpus: null, agent: false, authVolume: 'agentic-loop-agy-auth' };
 
 let tmp: string;
 beforeEach(() => {
@@ -152,7 +152,7 @@ describe('sandbox config', () => {
 
   it('is off by default and fills defaults when set', () => {
     expect(resolveAgentConfig(base).sandbox).toBeNull();
-    expect(resolveAgentConfig({ ...base, sandbox: { image: 'node:22' } }).sandbox).toEqual({ image: 'node:22', env: [], gateNetwork: false, memory: null, cpus: null });
+    expect(resolveAgentConfig({ ...base, sandbox: { image: 'node:22' } }).sandbox).toEqual({ image: 'node:22', env: [], gateNetwork: false, memory: null, cpus: null, agent: false, authVolume: 'agentic-loop-agy-auth' });
   });
 
   it('lists every problem', () => {

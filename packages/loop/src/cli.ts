@@ -13,6 +13,8 @@ import { readRecords, writeRecord } from './ledger.js';
 import { runLoop } from './loop.js';
 import { renderBudgetReport, renderFailureComment, renderPrBody } from './render.js';
 import { createRunner } from './runner.js';
+import { loginCommands } from './agent-sandbox.js';
+import { spawnSync } from 'node:child_process';
 import { createLocalDeps, sandboxDeps, watch } from './local.js';
 import { runIssue } from './run-issue.js';
 import { printTrace } from './trace.js';
@@ -36,6 +38,8 @@ Local mode (uses your own gh login and agent login on this machine).
                                Claim one issue, run it in a fresh clean clone, push, open the PR
   watch [--interval 60] [--take-unassigned] [--once] [--base <branch>] [--repo owner/name] [--work-dir <dir>]
                                Poll for ready issues assigned to you and run each one
+
+  login                        Sign the agent in inside Docker, once per machine (needs sandbox.agent)
 
   trace <file> [--follow]      Show an agent session trace as readable lines; --follow while it runs
 
@@ -121,6 +125,9 @@ switch (command) {
       return ok;
     });
 
+    if (config.sandbox?.agent) {
+      fail('sandbox.agent is on, which the GitHub Actions workflow does not support yet: the container signs in from a login volume on your machine. Use local mode (run-issue or watch), or turn sandbox.agent off for CI.');
+    }
     if (config.plan.approval === 'required') {
       fail('plan.approval is "required", which the GitHub Actions workflow does not support yet. Use local mode (run-issue or watch), or set plan.approval to "none" for CI.');
     }
@@ -170,6 +177,19 @@ switch (command) {
     } else {
       process.stdout.write(md);
     }
+    break;
+  }
+
+  case 'login': {
+    const config = loadConfig(cwd);
+    if (!config.sandbox?.agent) fail('login is only needed with "sandbox": { "image": "...", "agent": true } in the agent section of .factoryrc.json.');
+    console.log(`Signing agy in inside ${config.sandbox.image}. The login is saved to the Docker volume "${config.sandbox.authVolume}"; your own agy login is not used or changed.`);
+    console.log('Open the URL it prints, sign in, then paste the code back here. This uses one model request.\n');
+    for (const dockerArgs of loginCommands(config.sandbox)) {
+      const res = spawnSync('docker', dockerArgs, { stdio: 'inherit' });
+      if (res.status !== 0) fail(`docker exited with code ${res.status ?? res.signal}. Is Docker running, and does the image have agy?`);
+    }
+    console.log(`\nPASS: agent login saved to volume ${config.sandbox.authVolume}`);
     break;
   }
 

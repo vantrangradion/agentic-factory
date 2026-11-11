@@ -439,13 +439,15 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["image"],
-          "description": "Run setup and gates in Docker instead of on the host. Each gate run gets a fresh copy of only the files the commit would contain; setup has network, gates do not. The agent session still runs on the host.",
+          "description": "Run setup and gates in Docker instead of on the host. Each gate run gets a fresh copy of only the files the commit would contain; setup has network, gates do not. With agent: true the agent session runs in a container from the same image as well.",
           "properties": {
             "image": { "type": "string", "minLength": 1, "description": "Docker image with the project's toolchain, e.g. one built from node:22 with pnpm installed." },
             "env": { "type": "array", "items": { "type": "string" }, "description": "Names of host environment variables passed into the containers. Default none." },
             "gateNetwork": { "type": "boolean", "description": "Give gates network access. Default false." },
             "memory": { "type": "string", "description": "Docker memory limit, e.g. \"4g\"." },
-            "cpus": { "type": "number", "exclusiveMinimum": 0, "description": "Docker CPU limit, e.g. 2." }
+            "cpus": { "type": "number", "exclusiveMinimum": 0, "description": "Docker CPU limit, e.g. 2." },
+            "agent": { "type": "boolean", "description": "Run each agent session in a container from image (which must have agy installed) instead of on the host. Default false. Sign in once per machine with agentic-loop login." },
+            "authVolume": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]+$", "description": "Docker volume holding the agent's login. Default agentic-loop-agy-auth." }
           }
         }
       }

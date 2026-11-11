@@ -21,3 +21,4 @@ export * from './trace.js';
 export * from './git-safety.js';
 export * from './interrupt.js';
 export * from './sandbox.js';
+export * from './agent-sandbox.js';
