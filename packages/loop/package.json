@@ -1,6 +1,6 @@
 {
   "name": "@agentic-factory/loop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Project-agnostic agent loop: issue in, test-first pull request out, with gates, protected paths, budget and a run ledger",
   "license": "MIT",
   "repository": {
