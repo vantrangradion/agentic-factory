@@ -8,7 +8,7 @@ import { renderBudgetReport } from './render.js';
 import { loginCommands } from './agent-sandbox.js';
 import { vendorFor } from './vendors/index.js';
 import { spawnSync } from 'node:child_process';
-import { createLocalDeps, watch } from './local.js';
+import { createLocalDeps, watch, withRunnerOverride } from './local.js';
 import { runIssue } from './run-issue.js';
 import { printTrace } from './trace.js';
 import { wasInterrupted } from './interrupt.js';
@@ -54,7 +54,7 @@ function fail(message: string): never {
 
 function loadConfig(cwd: string): ResolvedAgentConfig {
   try {
-    return resolveAgentConfig(loadFactoryConfig(cwd).agent);
+    return withRunnerOverride(resolveAgentConfig(loadFactoryConfig(cwd).agent), process.env);
   } catch (err) {
     fail((err as Error).message);
   }

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { decideBudget } from './budget.js';
 import { claimIssue } from './claim.js';
-import type { ResolvedAgentConfig } from './config.js';
+import { modelFor, type ResolvedAgentConfig } from './config.js';
 import { TRUSTED_ASSOCIATIONS, type GitHubIssue, type GitHubOps, type RepoInfo } from './github.js';
 import { matchesAny } from './glob.js';
 import type { Issue } from './issue.js';
@@ -13,6 +13,7 @@ import type { LoopDeps, LoopOptions, LoopResult } from './loop.js';
 import { addUsage, ZERO_USAGE, type TokenUsage } from './runner.js';
 import { renderFailureComment, renderPlanPrBody, renderPrBody } from './render.js';
 import type { Notify, NotifyEvent } from './chat-notify.js';
+import { factoryConfigVersion, type ReporterFactory } from './factorybench.js';
 
 export type RunIssueOutcome = 'skipped' | 'over-budget' | 'plan-ready' | 'passed' | 'needs-human' | 'crashed';
 
@@ -56,6 +57,10 @@ export interface RunIssueDeps {
   notify?: Notify;
   /** Wait before confirming a claim on an issue this watcher assigned itself to. Default 3 s. */
   claimSettleMs?: number;
+  /** Reports each attempt to FactoryBench. Omitted: nothing is reported. */
+  report?: ReporterFactory;
+  /** This loop's version, for FactoryBench's factory_config_version. */
+  loopVersion?: string;
 }
 
 export interface RunIssueOptions {
@@ -167,6 +172,32 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
   if (existingPr?.labels?.includes(L.planApproved)) gh.editPrLabels(existingPr.number, [], [L.planApproved]);
   log(`#${n}: claimed by ${deps.me} for the ${stage} stage. ${budget.reason}`);
 
+  // One claimed stage run is one FactoryBench attempt; `finally` always ends it.
+  const fb = deps.report?.();
+  fb?.started({
+    repo: deps.repo.nameWithOwner,
+    issue: n,
+    configVersion: factoryConfigVersion(deps.loopVersion ?? 'dev', labelConfig.runner, modelFor(issue.labels, labelConfig)),
+    role: stage,
+    labels: issue.labels,
+  });
+  let finish: { status: 'completed' | 'failed'; reason?: string } = { status: 'failed', reason: 'crashed' };
+  const end = (r: RunIssueResult): RunIssueResult => {
+    // A crash message can quote commands and paths: FactoryBench only learns that it crashed.
+    finish = r.outcome === 'passed' || r.outcome === 'plan-ready' ? { status: 'completed' } : { status: 'failed', reason: r.outcome === 'crashed' ? 'crashed' : r.reason };
+    return r;
+  };
+  // The builder reports running totals, the reviewer one session: FactoryBench wants one delta per session.
+  const sentBuilder = { input: 0, cachedInput: 0, output: 0, total: 0, requests: 0 };
+  const reportUsage = (role: 'builder' | 'reviewer', model: string, usage: TokenUsage): void => {
+    // Claude Code sends its own usage to FactoryBench; a second count would double it.
+    if (!fb || current.runner === 'claude-code') return;
+    if (role === 'reviewer') return fb.usage(model, usage, 'review');
+    const delta = { input: usage.input - sentBuilder.input, cachedInput: usage.cachedInput - sentBuilder.cachedInput, output: usage.output - sentBuilder.output, total: usage.total - sentBuilder.total, requests: usage.requests - sentBuilder.requests };
+    Object.assign(sentBuilder, usage);
+    fb.usage(model, delta, 'implement');
+  };
+
   // The clean clone's config replaces this once it is loaded.
   let current = labelConfig;
   // Like review requests, a failed chat post never fails the run.
@@ -201,7 +232,7 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
   try {
     if (stage === 'build' && !existingPr) {
       needsHuman(`There is no open plan pull request on \`${branch}\` to build. Add \`${L.ready}\` to write a new plan.\n`);
-      return { outcome: 'needs-human', reason: 'no plan pull request to build', stage };
+      return end({ outcome: 'needs-human', reason: 'no plan pull request to build', stage });
     }
 
     const dir = path.join(deps.workRoot, 'work', `issue-${n}`);
@@ -211,11 +242,11 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
         `The plan branch \`${branch}\` no longer applies to \`${deps.repo.defaultBranch}\`: rebasing it conflicts in ${ws.rebaseConflicts.map((f) => `\`${f}\``).join(', ')}. Nothing was built. Rebase the branch by hand and add \`${L.planApproved}\` again, or add \`${L.ready}\` to write a new plan.\n`,
       );
       log(`#${n}: NEEDS HUMAN: rebase conflict in ${ws.rebaseConflicts.join(', ')}`);
-      return { outcome: 'needs-human', reason: 'the plan branch conflicts with the default branch', stage };
+      return end({ outcome: 'needs-human', reason: 'the plan branch conflicts with the default branch', stage });
     }
     const config = deps.loadConfig(dir);
     current = config;
-    const loopOpts: LoopOptions = { stage, diffBase: ws.diffBase };
+    const loopOpts: LoopOptions = { stage, diffBase: ws.diffBase, ...(fb?.attemptId ? { benchAttempt: fb.attemptId } : {}) };
     if (stage === 'build' && existingPr) {
       loopOpts.lockedTests = ws.changedFiles.filter((f) => matchesAny(f, config.tdd.testFiles));
       const plan = extractPlan(gh.prBody(existingPr));
@@ -228,7 +259,10 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
       const feedback = gh.prFeedback(existingPr);
       if (feedback) loopOpts.planFeedback = feedback;
     }
-    result = deps.loop(toLoopIssue(issue), config, dir, loopOpts, (role, model, usage) => spent.set(role, { model, usage }));
+    result = deps.loop(toLoopIssue(issue), config, dir, loopOpts, (role, model, usage) => {
+      spent.set(role, { model, usage });
+      reportUsage(role, model, usage);
+    });
 
     const loopIssue = toLoopIssue(issue);
     const planReady = result.passed && stage === 'plan';
@@ -256,24 +290,26 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
       prUrl = existingPr.url;
     }
 
+    if (prUrl) fb?.pr(prUrl, result.branch);
+
     if (planReady) {
       gh.editLabels(n, [config.labels.planReview], [L.working]);
       requestReview(prUrl, config.reviewers.plan);
       gh.comment(n, writeFile(outDir, 'comment.md', `A plan and failing tests are ready for review: ${prUrl ?? 'no pull request'}\n\nAdd \`${config.labels.planApproved}\` to build it, or comment on the pull request and add \`${config.labels.ready}\` to re-plan.\n${ccLine(others(config.reviewers.plan, deps.me))}`));
       tell('plan-ready', prUrl);
       log(`#${n}: PLAN READY ${prUrl ?? ''}`);
-      return { outcome: 'plan-ready', reason: 'waiting for plan approval', stage, ...(prUrl ? { prUrl } : {}) };
+      return end({ outcome: 'plan-ready', reason: 'waiting for plan approval', stage, ...(prUrl ? { prUrl } : {}) });
     }
     if (result.passed) {
       gh.editLabels(n, [config.labels.prOpen], [L.working]);
       requestReview(prUrl, config.reviewers.pr);
       tell('passed', prUrl);
       log(`#${n}: PASS ${prUrl ?? ''}`);
-      return { outcome: 'passed', reason: 'all gates pass', stage, ...(prUrl ? { prUrl } : {}) };
+      return end({ outcome: 'passed', reason: 'all gates pass', stage, ...(prUrl ? { prUrl } : {}) });
     }
     needsHuman(`${body}\nPull request: ${prUrl ?? 'none (no commits)'}\n`, prUrl);
     log(`#${n}: NEEDS HUMAN ${prUrl ?? ''}`);
-    return { outcome: 'needs-human', reason: result.stopReason ?? 'the run did not pass', stage, ...(prUrl ? { prUrl } : {}) };
+    return end({ outcome: 'needs-human', reason: result.stopReason ?? 'the run did not pass', stage, ...(prUrl ? { prUrl } : {}) });
   } catch (err) {
     const message = (err as Error).message;
     log(`#${n}: crashed: ${message}`);
@@ -283,8 +319,9 @@ export function runIssue(n: number, labelConfig: ResolvedAgentConfig, deps: RunI
     } catch (inner) {
       log(`#${n}: could not report the crash on the issue: ${(inner as Error).message}`);
     }
-    return { outcome: 'crashed', reason: message, stage };
+    return end({ outcome: 'crashed', reason: message, stage });
   } finally {
+    fb?.finished(finish.status, finish.reason);
     // A crash after agent sessions still spent tokens: charge them to the budget.
     const record = result?.record ?? crashRecord(issue, stage, spent, labelConfig, deps.now());
     if (record) {

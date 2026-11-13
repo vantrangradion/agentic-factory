@@ -31,3 +31,11 @@ export interface ParsedSession {
   error?: string;
   toolCalls: Record<string, number>;
 }
+
+/**
+ * True when a session failed because the account's quota or usage limit is
+ * used up. Retrying cannot help until it resets, so the loop stops instead.
+ */
+export function isQuotaError(error: string | undefined): boolean {
+  return error !== undefined && /quota (reached|exceeded)|usage limit|hit your limit|resource[_ ]exhausted|rate[_ ]limit/i.test(error);
+}

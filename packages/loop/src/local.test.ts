@@ -289,6 +289,67 @@ describe('runIssue', () => {
     expect(ledger.appended).toEqual([]);
   });
 
+  it('reports each claimed run to FactoryBench as one attempt with per-session usage', () => {
+    const gh = new FakeGitHub('dylan');
+    ready(gh);
+    const { d } = deps(gh);
+    const events: unknown[][] = [];
+    d.report = () => ({
+      attemptId: 'a1',
+      started: (p) => events.push(['started', p.role, p.issue]),
+      usage: (m, u, phase) => events.push(['usage', m, u.input, phase]),
+      pr: (url) => events.push(['pr', url]),
+      finished: (s, r) => events.push(['finished', s, r]),
+    });
+    d.loop = (_i, _c, _d, o, onUsage) => {
+      onUsage?.('builder', 'm', { input: 100, cachedInput: 0, output: 1, total: 101, requests: 1 });
+      onUsage?.('builder', 'm', { input: 250, cachedInput: 0, output: 2, total: 252, requests: 2 });
+      onUsage?.('reviewer', 'r', { input: 30, cachedInput: 0, output: 1, total: 31, requests: 1 });
+      return loopResult(5, true, ['abc'], o.stage);
+    };
+
+    runIssue(5, config(), d, { takeUnassigned: false, explicit: false });
+
+    expect(events).toEqual([
+      ['started', 'full', 5],
+      ['usage', 'm', 100, 'implement'],
+      ['usage', 'm', 150, 'implement'],
+      ['usage', 'r', 30, 'review'],
+      ['pr', 'https://example.com/pull/100'],
+      ['finished', 'completed', undefined],
+    ]);
+  });
+
+  it('ends the FactoryBench attempt of a crashed run without the crash message', () => {
+    const gh = new FakeGitHub('dylan');
+    ready(gh);
+    const { d } = deps(gh, { crash: 'Setup failed in /secret/path' });
+    const finished: unknown[] = [];
+    d.report = () => ({ attemptId: 'a1', started() {}, usage() {}, pr() {}, finished: (s, r) => finished.push([s, r]) });
+
+    runIssue(5, config(), d, { takeUnassigned: false, explicit: false });
+
+    expect(finished).toEqual([['failed', 'crashed']]);
+  });
+
+  it('leaves usage to Claude Code telemetry and passes the attempt id to the loop', () => {
+    const gh = new FakeGitHub('dylan');
+    ready(gh);
+    const { d, calls } = deps(gh, { cfg: config({ runner: 'claude-code' }) });
+    const usage: unknown[] = [];
+    d.report = () => ({ attemptId: 'a1', started() {}, usage: (...a) => usage.push(a), pr() {}, finished() {} });
+    d.loop = (_i, _c, _d, o, onUsage) => {
+      calls.loopOpts.push(o);
+      onUsage?.('builder', 'm', { input: 100, cachedInput: 0, output: 1, total: 101, requests: 1 });
+      return loopResult(5, true, ['abc'], o.stage);
+    };
+
+    runIssue(5, config(), d, { takeUnassigned: false, explicit: false });
+
+    expect(usage).toEqual([]);
+    expect(calls.loopOpts[0]?.benchAttempt).toBe('a1');
+  });
+
   it('charges the tokens of a run that crashed after agent sessions', () => {
     const gh = new FakeGitHub('dylan');
     ready(gh);

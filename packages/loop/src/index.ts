@@ -29,3 +29,4 @@ export { VENDORS, vendorFor, antigravity, claudeCode } from './vendors/index.js'
 export { parseClaudeStream, formatClaudeEvent, claudeArgs } from './vendors/claude-code.js';
 export { formatAntigravityEvent } from './vendors/antigravity.js';
 export { newTraceState } from './trace-format.js';
+export { claudeTelemetryEnv, createFactoryBench, factoryConfigVersion, FACTORYBENCH_URL_VAR, FACTORYBENCH_TOKEN_VAR, type AttemptReporter, type ReporterFactory } from './factorybench.js';

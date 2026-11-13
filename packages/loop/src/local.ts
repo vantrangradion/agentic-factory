@@ -3,17 +3,18 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { loadFactoryConfig } from '@agentic-factory/guards';
-import { modelFor, resolveAgentConfig, type ResolvedAgentConfig } from './config.js';
+import { modelFor, resolveAgentConfig, RUNNERS, type ResolvedAgentConfig, type RunnerName } from './config.js';
 import { makeShellExecutor } from './gates.js';
 import { createGitOps } from './git.js';
 import { createWorkspaceNotifier, WORKSPACE_TOKEN_VAR } from './chat-notify.js';
+import { claudeTelemetryEnv, createFactoryBench } from './factorybench.js';
 import { createGhOps, repoInfo } from './github.js';
 import { createGitLedgerStore } from './ledger-store.js';
 import { runLoop } from './loop.js';
 import { watchOnce, type RunIssueDeps } from './run-issue.js';
 import { checkAgentSandbox, DockerAgentRunner } from './agent-sandbox.js';
 import { createRunner, type AgentCliOptions, type AgentRunner } from './runner.js';
-import { vendorFor } from './vendors/index.js';
+import { VENDORS, vendorFor } from './vendors/index.js';
 import { agentEnv } from './safe-env.js';
 import { assertDockerAvailable, createDockerGateRunner, type GateRunner } from './sandbox.js';
 import { restoreGitDir, type GitDirSnapshot } from './git-safety.js';
@@ -48,7 +49,35 @@ function ghToken(): string | undefined {
 }
 
 export function loadAgentConfig(dir: string): ResolvedAgentConfig {
-  return resolveAgentConfig(loadFactoryConfig(dir).agent);
+  return withRunnerOverride(resolveAgentConfig(loadFactoryConfig(dir).agent), process.env);
+}
+
+/**
+ * AGENTIC_LOOP_RUNNER and AGENTIC_LOOP_MODEL try another agent without a
+ * commit to the default branch. Label routes and the review model belong to
+ * the configured runner, so an override drops them; so does pricing, which
+ * leaves the cost unknown rather than wrong.
+ */
+export function withRunnerOverride(config: ResolvedAgentConfig, env: NodeJS.ProcessEnv): ResolvedAgentConfig {
+  const runner = env['AGENTIC_LOOP_RUNNER'];
+  const model = env['AGENTIC_LOOP_MODEL'];
+  if (!runner && !model) return config;
+  if (runner && !(RUNNERS as readonly string[]).includes(runner)) throw new Error(`AGENTIC_LOOP_RUNNER "${runner}" is not supported; use one of: ${RUNNERS.join(', ')}`);
+  if (runner && runner !== config.runner && !model) throw new Error('AGENTIC_LOOP_RUNNER needs AGENTIC_LOOP_MODEL too: the configured model belongs to another runner');
+  const next = (runner ?? config.runner) as RunnerName;
+  const sandbox =
+    config.sandbox && config.sandbox.authVolume === VENDORS[config.runner]?.sandbox.defaultAuthVolume
+      ? { ...config.sandbox, authVolume: vendorFor(next).sandbox.defaultAuthVolume }
+      : config.sandbox;
+  return {
+    ...config,
+    runner: next,
+    model: model ?? config.model,
+    routes: [],
+    review: { ...config.review, model: null },
+    budget: { ...config.budget, pricing: {} },
+    ...(sandbox ? { sandbox } : {}),
+  };
 }
 
 /** Wires runIssue to the real gh, git and agent CLIs on this machine. */
@@ -103,9 +132,11 @@ export function createLocalDeps(opts: LocalOptions): RunIssueDeps {
       };
       const gitOps = createGitOps(dir, { beforeCommand: () => restoreGitDir(trusted(dir)) });
       const makeRunner = agentRunnerFactory(config, runnerOpts, opts.log);
+      const telemetry = (phase: 'implement' | 'review') =>
+        config.runner === 'claude-code' && loopOpts.benchAttempt ? claudeTelemetryEnv(process.env, loopOpts.benchAttempt, phase) : {};
       return runLoop(issue, config, contextFiles, {
-        runner: makeRunner(model),
-        reviewRunner: makeRunner(config.review.model ?? model),
+        runner: makeRunner(model, telemetry('implement')),
+        reviewRunner: makeRunner(config.review.model ?? model, telemetry('review')),
         git: gitOps,
         exec,
         ...sandboxDeps(config, { listFiles: () => gitOps.filesToCommit(), workRoot, env, log: opts.log }),
@@ -123,7 +154,18 @@ export function createLocalDeps(opts: LocalOptions): RunIssueDeps {
     now: () => new Date(),
     log: opts.log,
     ...(workspaceToken ? { notify: createWorkspaceNotifier(workspaceToken) } : {}),
+    report: createFactoryBench(process.env, opts.log),
+    loopVersion: loopVersion(),
   };
+}
+
+function loopVersion(): string {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')) as { version?: string };
+    return pkg.version ?? 'dev';
+  } catch {
+    return 'dev';
+  }
 }
 
 /**
@@ -131,17 +173,22 @@ export function createLocalDeps(opts: LocalOptions): RunIssueDeps {
  * `sandbox.agent` is on, after checking that the image has the agent CLI and
  * the login volume holds a login; on the host otherwise.
  */
-export function agentRunnerFactory(config: ResolvedAgentConfig, base: Omit<AgentCliOptions, 'model'>, log: (m: string) => void): (model: string) => AgentRunner {
+export function agentRunnerFactory(
+  config: ResolvedAgentConfig,
+  base: Omit<AgentCliOptions, 'model'>,
+  log: (m: string) => void,
+): (model: string, extraEnv?: Record<string, string>) => AgentRunner {
   const sb = config.sandbox;
-  if (!sb?.agent) return (model) => createRunner(config.runner, { ...base, model });
+  if (!sb?.agent) return (model, extraEnv = {}) => createRunner(config.runner, { ...base, model, env: { ...base.env, ...extraEnv } });
   const vendor = vendorFor(config.runner);
   assertDockerAvailable();
   const agentVersion = checkAgentSandbox(sb, undefined, undefined, vendor);
   log(`Agent sessions run in Docker (${sb.image}, ${vendor.binary} ${agentVersion}) with network, signed in from volume ${sb.authVolume}`);
-  return (model) =>
+  return (model, extraEnv = {}) =>
     new DockerAgentRunner({
       vendor,
       model,
+      ...(Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {}),
       timeoutMs: base.timeoutMs,
       sandbox: sb,
       agentVersion,
