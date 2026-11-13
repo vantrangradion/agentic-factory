@@ -36,10 +36,18 @@ export function startScript(vendor: AgentVendor): string {
 }
 
 /** Runs `docker` with stdout going to `stdoutFd`. Injected so tests never need Docker. */
-export type DockerSpawn = (args: string[], opts: { stdoutFd: number; timeoutMs: number }) => SessionExit;
+export type DockerSpawn = (args: string[], opts: { stdoutFd: number; timeoutMs: number; env?: Record<string, string> }) => SessionExit;
 
-export const dockerSpawn: DockerSpawn = (args, { stdoutFd, timeoutMs }) => {
-  const res = spawnSync('docker', args, { stdio: ['ignore', stdoutFd, 'pipe'], encoding: 'utf-8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
+/**
+ * Ctrl+C reaches the docker client, which passes it to the agent; Claude Code
+ * then exits 0, so the exit code alone cannot tell the loop the user stopped
+ * it. This wrapper notes the signal and exits 130 once docker is done.
+ */
+export const DOCKER_INTERRUPT_WRAPPER = ['interrupted=0', "trap 'interrupted=1' INT", '"$@"', 'code=$?', '[ "$interrupted" = 1 ] && exit 130', 'exit $code'].join('\n');
+
+export const dockerSpawn: DockerSpawn = (args, { stdoutFd, timeoutMs, env }) => {
+  // `env` reaches the container through `--env NAME`, so values never appear in the process list.
+  const res = spawnSync('bash', ['-c', DOCKER_INTERRUPT_WRAPPER, 'agentic-loop-docker', 'docker', ...args], { stdio: ['ignore', stdoutFd, 'pipe'], encoding: 'utf-8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, ...(env ? { env: { ...process.env, ...env } } : {}) });
   return { status: res.status, signal: res.signal, stderr: res.stderr ?? '', ...(res.error ? { error: res.error } : {}) };
 };
 
@@ -76,6 +84,8 @@ export interface DockerAgentRunnerOptions {
   user?: string;
   spawn?: DockerSpawn;
   docker?: DockerCli;
+  /** Extra variables for the agent, e.g. telemetry settings. Passed by name, values through the docker client's environment. */
+  env?: Record<string, string>;
 }
 
 export class DockerAgentRunner implements AgentRunner {
@@ -96,6 +106,7 @@ export class DockerAgentRunner implements AgentRunner {
     const host = path.resolve(cwd);
     return [
       ...baseRunArgs(containerName, sandbox, this.opts.user ?? defaultUser(), { network: true }),
+      ...Object.keys(this.opts.env ?? {}).flatMap((k) => ['--env', k]),
       '--volume', `${host}:${AGENT_WORK_DIR}`,
       '--volume', `${path.join(host, '.git')}:${AGENT_WORK_DIR}/.git:ro`,
       '--volume', `${sandbox.authVolume}:${AUTH_MOUNT}:ro`,
@@ -115,7 +126,7 @@ export class DockerAgentRunner implements AgentRunner {
     const { traceFile, fd } = openTrace(this.opts.logDir, this.opts.onSessionStart);
     let exit: SessionExit;
     try {
-      exit = spawn(args, { stdoutFd: fd, timeoutMs: sessionDeadlineMs(this.vendor, this.opts.timeoutMs) });
+      exit = spawn(args, { stdoutFd: fd, timeoutMs: sessionDeadlineMs(this.vendor, this.opts.timeoutMs), ...(this.opts.env ? { env: this.opts.env } : {}) });
     } finally {
       fs.closeSync(fd);
       // A timeout or Ctrl+C can end the docker client before the container. The container dies with it, so no process the agent started keeps changing files.

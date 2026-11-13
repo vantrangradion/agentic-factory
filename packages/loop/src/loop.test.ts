@@ -284,6 +284,21 @@ describe('scope checks added after review', () => {
     expect(result.commits).toEqual([]);
     expect(agent.prompts).toHaveLength(1);
   });
+
+  it('stops at once, without retrying, when the agent is out of quota', () => {
+    const agent = new ScriptedAgent([writeTests, writeTests, writeTests]);
+    const outOfQuota: AgentRunner = {
+      name: 'q',
+      model: 'test-model',
+      run: (p, c) => ({ ...agent.run(p, c), exitCode: 3, error: 'Individual quota reached. Please upgrade your subscription to increase your limits.' }),
+    };
+    const result = runLoop(ISSUE, config(), [], { runner: outOfQuota, git: createGitOps(repo), exec: shellExecutor, cwd: repo, now: () => new Date(), log: () => {} });
+    expect(result.passed).toBe(false);
+    expect(result.stopReason).toContain('quota or usage limit is used up');
+    expect(result.stopReason).not.toContain('Gates still failing');
+    expect(result.record.caughtBy).toEqual(['quota']);
+    expect(agent.prompts).toHaveLength(1);
+  });
 });
 
 describe('stages', () => {

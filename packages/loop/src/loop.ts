@@ -12,6 +12,7 @@ import { unplannedFiles } from './plan.js';
 import { buildPrompt, type Phase } from './prompt.js';
 import { buildReviewPrompt, describeFindings, isActionable, parseFindings, type Finding } from './review.js';
 import { addUsage, ZERO_USAGE, type AgentRunner, type AgentRunResult, type TokenUsage } from './runner.js';
+import { isQuotaError } from './usage.js';
 import type { GateRunner } from './sandbox.js';
 
 export interface LoopDeps {
@@ -48,6 +49,8 @@ export interface LoopOptions {
   buildFeedback?: string;
   /** Commit the review diff starts from. Default: HEAD when the run starts. */
   diffBase?: string;
+  /** FactoryBench attempt id, for agents that report their own telemetry. */
+  benchAttempt?: string;
 }
 
 export interface ReviewOutcome {
@@ -86,6 +89,11 @@ export interface LoopResult {
 
 const SUBJECT_MAX = 72;
 const STOPPED = 'Stopped by the user before the run finished.';
+
+/** Why a run stopped at a quota error: retrying cannot help until the limit resets. */
+function quotaStop(error: string | undefined): string {
+  return `The agent's quota or usage limit is used up, so the run stopped without retrying. The gates did not run. Agent said: ${(error ?? '').slice(0, 300)}`;
+}
 
 function subject(prefix: string, title: string, issue: number): string {
   const suffix = ` (#${issue})`;
@@ -245,6 +253,13 @@ export function runLoop(
         phase.attempts.push(attemptRecord(attempt, res, [], scope, 'stopped'));
         break;
       }
+      if (isQuotaError(res.error)) {
+        stopReason = quotaStop(res.error);
+        caughtBy.push('quota');
+        phase.attempts.push(attemptRecord(attempt, res, [], scope, 'quota'));
+        log(`[red] ${stopReason}`);
+        break;
+      }
       const notes = scopeNotes(scope);
       if (res.error) notes.unshift(`The agent session reported an error: ${res.error}`);
       const tests = git.changedFiles(base).filter((f) => matchesAny(f, config.tdd.testFiles));
@@ -317,6 +332,13 @@ export function runLoop(
       if (res.interrupted || deps.shouldStop?.()) {
         stopReason = STOPPED;
         phase.attempts.push(attemptRecord(attempt, res, [], scope, 'stopped'));
+        break;
+      }
+      if (isQuotaError(res.error)) {
+        stopReason = quotaStop(res.error);
+        caughtBy.push('quota');
+        phase.attempts.push(attemptRecord(attempt, res, [], scope, 'quota'));
+        log(`[${phaseName}] ${stopReason}`);
         break;
       }
       const notes = scopeNotes(scope);

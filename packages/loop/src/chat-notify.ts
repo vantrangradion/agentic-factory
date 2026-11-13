@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ResolvedAgentConfig } from './config.js';
 
 /** HTTP auth scheme for personal API tokens. */
-const AUTH_SCHEME = 'Bearer';
+export const AUTH_SCHEME = 'Bearer';
 
 /** Environment variable holding the chat token. Never passed to the agent or gates. */
 export const WORKSPACE_TOKEN_VAR = 'AGENTIC_LOOP_WORKSPACE_TOKEN';
@@ -40,10 +40,10 @@ export function notifyText(event: NotifyEvent, cc: string): string {
  * Posts with curl. The token goes in through stdin (`-H @-`), so it never
  * appears in the process list.
  */
-export const curlPost: HttpPost = (url, token, body) => {
+export const curlPost = (url: string, token: string, body: string, maxTimeSec = 20): { status: number; body: string } => {
   const res = spawnSync(
     'curl',
-    ['-sS', '--max-time', '20', '-X', 'POST', '-H', '@-', '-H', 'Content-Type: application/json', '--data-binary', body, '-w', '\n%{http_code}', url],
+    ['-sS', '--max-time', String(maxTimeSec), '-X', 'POST', '-H', '@-', '-H', 'Content-Type: application/json', '--data-binary', body, '-w', '\n%{http_code}', url],
     { input: `Authorization: ${AUTH_SCHEME} ${token}\n`, encoding: 'utf-8' },
   );
   if (res.error) throw res.error;
